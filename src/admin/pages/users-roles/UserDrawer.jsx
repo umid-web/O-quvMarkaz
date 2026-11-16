@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Ban, CalendarDays, Clock, Edit3, KeyRound, Mail, Phone, ShieldCheck, StickyNote, Trash2, UserCheck } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import Avatar from '../../components/ui/Avatar';
-import { formatDate, formatDateTime, formatPhone } from '../../utils/format';
+import { formatDate, formatDateTime, formatPhone, formatSom } from '../../utils/format';
 import { USER_STATUSES, summarizePermissions, userName } from './usersData';
 
 const Row = ({ icon: Icon, label, children }) => (
@@ -16,7 +16,7 @@ const Row = ({ icon: Icon, label, children }) => (
 );
 
 /** Foydalanuvchi profili — yon panel: ma'lumotlar, rol ruxsatlari va tezkor amallar. */
-const UserDrawer = ({ user, role, onClose, onEdit, onDelete, onToggleBlock, onResetPassword }) => {
+const UserDrawer = ({ user, role, onClose, onEdit, onDelete, onToggleBlock, onResetPassword, canEdit = true, canDelete = true }) => {
   const summary = useMemo(() => summarizePermissions(role), [role]);
   if (!user) return null;
 
@@ -31,10 +31,10 @@ const UserDrawer = ({ user, role, onClose, onEdit, onDelete, onToggleBlock, onRe
       title="Foydalanuvchi profili"
       footer={
         <>
-          <button type="button" className="btn btn--ghost" onClick={() => onDelete(user)} style={{ marginRight: 'auto', color: 'var(--danger)' }}>
+          <button type="button" className="btn btn--ghost" disabled={!canDelete} onClick={() => onDelete(user)} style={{ marginRight: 'auto', color: 'var(--danger)' }}>
             <Trash2 size={16} /> O‘chirish
           </button>
-          <button type="button" className="btn btn--primary" onClick={() => onEdit(user)}>
+          <button type="button" className="btn btn--primary" disabled={!canEdit} onClick={() => onEdit(user)}>
             <Edit3 size={16} /> Tahrirlash
           </button>
         </>
@@ -47,7 +47,7 @@ const UserDrawer = ({ user, role, onClose, onEdit, onDelete, onToggleBlock, onRe
             <h3 className="profile__name">{userName(user)}</h3>
             <div className="profile__meta">
               <span className="profile__id">{user.id}</span>
-              {role && <span className={`badge badge--${role.tone}`}>{role.name}</span>}
+              {role && <span className={`badge badge--${role.tone}`}>{user.roleId === 'teacher' && user.teacherType === 'support' ? 'Qo‘shimcha o‘qituvchi' : role.name}</span>}
               <span className={`badge badge--dot badge--${status.tone}`}>{status.label}</span>
             </div>
           </div>
@@ -55,11 +55,11 @@ const UserDrawer = ({ user, role, onClose, onEdit, onDelete, onToggleBlock, onRe
 
         <div className="profile__actions">
           {user.status !== 'blocked' && (
-            <button type="button" className="btn btn--secondary btn--sm" onClick={() => onResetPassword(user)}>
+            <button type="button" className="btn btn--secondary btn--sm" disabled={!canEdit} onClick={() => onResetPassword(user)}>
               <KeyRound size={14} /> Parolni tiklash
             </button>
           )}
-          <button type="button" className="btn btn--secondary btn--sm" onClick={() => onToggleBlock(user)}>
+          <button type="button" className="btn btn--secondary btn--sm" disabled={!canEdit} onClick={() => onToggleBlock(user)}>
             {blocked ? <UserCheck size={14} /> : <Ban size={14} />}
             {blocked ? 'Faollashtirish' : 'Bloklash'}
           </button>
@@ -69,6 +69,7 @@ const UserDrawer = ({ user, role, onClose, onEdit, onDelete, onToggleBlock, onRe
           <h4>Ma'lumotlar</h4>
           <Row icon={Mail} label="Login">{user.login || user.email?.split('@')[0] || '—'}</Row>
           <Row icon={Phone} label="Telefon">{formatPhone(user.phone)}</Row>
+          {user.monthlySalary !== undefined && <Row icon={ShieldCheck} label="Oylik maosh">{formatSom(user.monthlySalary)}</Row>}
           <Row icon={CalendarDays} label="Qo‘shilgan sana">{formatDate(user.createdAt)}</Row>
           <Row icon={Clock} label="Oxirgi kirish">{user.lastLoginAt ? formatDateTime(user.lastLoginAt) : 'Hali kirmagan'}</Row>
           {user.note && <Row icon={StickyNote} label="Izoh">{user.note}</Row>}

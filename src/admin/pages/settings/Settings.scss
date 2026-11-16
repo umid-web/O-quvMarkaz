@@ -2,7 +2,7 @@
 
 .settings-layout {
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
+  grid-template-columns: 215px minmax(0, 1fr);
   gap: $spacing-md;
   align-items: start;
 
@@ -35,7 +35,7 @@
     align-items: center;
     gap: 0.7rem;
     width: 100%;
-    padding: 0.7rem 0.75rem;
+    padding: 0.6rem 0.65rem;
     border: 0;
     border-radius: $radius-sm;
     background: transparent;
@@ -46,7 +46,7 @@
 
     strong {
       display: block;
-      font-size: 0.9rem;
+      font-size: 0.8rem;
       font-weight: 600;
       color: inherit;
     }
@@ -54,7 +54,7 @@
     small {
       display: block;
       margin-top: 0.1rem;
-      font-size: 0.75rem;
+      font-size: 0.68rem;
       opacity: 0.85;
     }
 
@@ -228,7 +228,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.9rem 1rem;
+  padding: 0.75rem 0.85rem;
   background: var(--surface);
 
   & + & {
@@ -237,7 +237,7 @@
 
   strong {
     display: block;
-    font-size: 0.92rem;
+    font-size: 0.82rem;
     font-weight: 600;
   }
 
@@ -371,5 +371,17 @@
     display: flex;
     gap: 0.5rem;
   }
+}
+
+@media (max-width: 600px) {
+  .theme-picks { gap: 0.5rem; }
+  .theme-pick { flex: 1 1 110px; min-width: 0; font-size: 0.78rem; }
+  .theme-pick__preview { height: 58px; }
+  .settings-logo__row { flex-wrap: wrap; gap: 0.75rem; }
+  .settings-logo__preview { flex-shrink: 0; width: 48px; height: 48px; border-radius: 10px; }
+  .settings-data__item { padding: 0.8rem; }
+  .settings-data__item p { font-size: 0.78rem; overflow-wrap: anywhere; }
+  .settings-bar { padding: 0.65rem 0.8rem; bottom: 0.5rem; font-size: 0.78rem; box-shadow: var(--shadow-md); }
+  .settings-bar > div { flex-wrap: wrap; }
 }
 

@@ -20,47 +20,34 @@ import { toLocalStamp } from '../activity/time';
 import TodaySchedule from '../components/TodaySchedule';
 import Alerts from '../components/Alerts';
 import QuickActions from '../components/QuickActions';
-import {
-  getStats,
-  getStudentStats,
-  getCourseDistribution,
-  getPaymentsStatus,
-  getRecentActivities,
-  getTodaySchedule,
-  getAlerts,
-  getPeriodLabel,
-  REVENUE_PERIODS,
-} from '../data/dashboardDemoData';
-import { formatNumber, formatMoney } from '../utils/format';
-import { loadGroups } from './groups/groupsStore';
+import { getPeriodLabel, REVENUE_PERIODS } from '../data/dashboardOptions';
+import { buildDashboardData } from '../data/dashboardData';
+import { formatMoney } from '../utils/format';
+import { downloadCsv } from '../utils/csv';
 import { useStudents } from './students/useStudents';
-import { isoDate, usePayments } from './finance/financeStore';
+import { isoDate, useExpenses, usePayments } from './finance/financeStore';
+import { useTeachers } from './teachers/teachersStore';
+import { useSupportTeachers } from './support-teachers/supportStore';
+import { useCourses } from './courses/coursesStore';
+import { useGroups } from './groups/groupsStore';
+import { refreshBackendState } from '../../api/backend';
 import './Dashboard.scss';
-
-const loadData = (period) => ({
-  stats: getStats(period),
-  studentStats: getStudentStats(),
-  courseDist: getCourseDistribution(),
-  paymentStatus: getPaymentsStatus(),
-  activities: getRecentActivities(),
-  schedule: getTodaySchedule(),
-  alerts: getAlerts(),
-});
-
-const csvCell = (value) => `"${String(value).replace(/"/g, '""')}"`;
 
 /**
  * Dashboard sahifasi: ko‘rsatkichlar, tezkor amallar, grafiklar, jadval va ogohlantirishlar.
- * Barcha ma'lumotlar DEMO — keyinchalik backend bilan almashtiriladi.
  */
 const Dashboard = () => {
   const [period, setPeriod] = useState('month');
   const [revenuePeriod, setRevenuePeriod] = useState('month');
-  const [data, setData] = useState(() => loadData('month'));
+  const [now] = useState(() => new Date());
   const { students } = useStudents();
   const { payments } = usePayments(students);
-
-  // So‘nggi faoliyatlar — haqiqiy faoliyat tarixidan (bo‘sh bo‘lsa, DEMO ro‘yxat)
+  const { expenses } = useExpenses();
+  const { teachers } = useTeachers();
+  const { supportTeachers } = useSupportTeachers();
+  const { courses } = useCourses();
+  const { groups } = useGroups();
+  const data = useMemo(() => buildDashboardData({ students, payments, expenses, teachers, supportTeachers, courses, groups, period, now }), [students, payments, expenses, teachers, supportTeachers, courses, groups, period, now]);
   const live = useActivities();
   const recent = useMemo(
     () => live.slice(0, 6).map((a) => ({ id: a.id, type: a.module, tone: a.severity, description: a.title, time: toLocalStamp(a.at) })),
@@ -69,23 +56,24 @@ const Dashboard = () => {
 
   const handlePeriodChange = (next) => {
     setPeriod(next);
-    setData(loadData(next));
+  };
+  const handleRefresh = async () => {
+    try {
+      await refreshBackendState();
+      window.location.reload();
+    } catch (error) {
+      window.dispatchEvent(new CustomEvent('educontrol:sync-error', { detail: error.message }));
+    }
   };
 
-  // Backend ulanganda bu yerda qayta so‘rov yuboriladi
-  const handleRefresh = () => setData(loadData(period));
-
   const { stats } = data;
-  const todayKey = isoDate(new Date());
+  const todayKey = isoDate(now);
   const monthKey = todayKey.slice(0, 7);
   const todayPayments = payments.filter((payment) => payment.date === todayKey);
   const monthPayments = payments.filter((payment) => payment.date?.startsWith(monthKey));
   const paymentTotal = (list) => list.reduce((total, payment) => total + Number(payment.amount || 0), 0);
   const averagePayment = payments.length ? paymentTotal(payments) / payments.length : 0;
-  const scheduleGroups = loadGroups();
-  const availableRooms = [...new Set(scheduleGroups.map((group) => group.room).filter(Boolean))];
-  const today = new Date().getDay();
-  const occupiedRooms = new Set(scheduleGroups.filter((group) => group.status === 'active' && group.days?.includes(today)).map((group) => group.room));
+  const { availableRooms, occupiedRooms } = data;
   const periodLabel = getPeriodLabel(period);
 
   const handleExport = () => {
@@ -96,20 +84,11 @@ const Dashboard = () => {
       ['Ustozlar', stats.totalTeachers],
       ['Qo‘shimcha ustozlar', stats.extraTeachers],
       ['Faol guruhlar', stats.activeGroups],
-      ['Bugungi tushum (DEMO)', formatMoney(stats.todayIncome)],
-      [`Tushum — ${periodLabel} (DEMO)`, formatMoney(stats.periodIncome)],
-      ['Qarzdorlik (DEMO)', formatMoney(stats.unpaidDebts)],
+      ['Bugungi tushum ', formatMoney(stats.todayIncome)],
+      [`Tushum — ${periodLabel} `, formatMoney(stats.periodIncome)],
+      ['Qarzdorlik ', formatMoney(stats.unpaidDebts)],
     ];
-    // BOM (\uFEFF) — Excel o‘zbekcha belgilarni (‘, ʻ) to‘g‘ri ochishi uchun
-    const csv = '\uFEFF' + rows.map((r) => r.map(csvCell).join(',')).join('\r\n');
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'dashboard_statistika_demo.csv';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+    downloadCsv('dashboard_statistika.csv', rows);
   };
 
   return (
@@ -138,7 +117,6 @@ const Dashboard = () => {
           className="span-8"
           title="Daromad va xarajat"
           subtitle="Million so‘mda"
-          demo
           actions={
             <SegmentedControl
               label="Grafik davri"
@@ -148,37 +126,36 @@ const Dashboard = () => {
             />
           }
         >
-          <RevenueChart period={revenuePeriod} />
+          <RevenueChart data={data.revenue(revenuePeriod)} />
         </Card>
 
-        <Card className="span-4" title="To‘lovlar holati" subtitle="Talabalar ulushi, %" demo>
+        <Card className="span-4" title="To‘lovlar holati" subtitle="Talabalar ulushi, %">
           <PaymentsStatusChart data={data.paymentStatus} />
         </Card>
 
-        <Card className="span-6" title="O‘quvchilar statistikasi" subtitle="Haftalar kesimida" demo>
+        <Card className="span-6" title="O‘quvchilar statistikasi" subtitle="Haftalar kesimida">
           <StudentStatsChart data={data.studentStats} />
         </Card>
 
-        <Card className="span-6" title="Kurslar bo‘yicha taqsimot" subtitle="Talabalar soni" demo>
+        <Card className="span-6" title="Kurslar bo‘yicha taqsimot" subtitle="Talabalar soni">
           <CourseDistributionChart data={data.courseDist} />
         </Card>
       </section>
 
       <section className="grid" aria-label="Bugungi ma'lumotlar">
-        <Card className="span-8" title="Bugungi darslar" demo>
+        <Card className="span-8" title="Bugungi darslar">
           <TodaySchedule schedule={data.schedule} availableRooms={availableRooms} occupiedRooms={occupiedRooms} />
         </Card>
 
         <div className="span-4 stack">
-          <Card title="Ogohlantirishlar" demo>
+          <Card title="Ogohlantirishlar">
             <Alerts alerts={data.alerts} />
           </Card>
           <Card
             title="So‘nggi faoliyatlar"
-            demo={recent.length === 0}
             actions={<Link to="/admin/activity" className="btn btn--ghost btn--sm">Barchasi</Link>}
           >
-            <RecentActivities activities={recent.length ? recent : data.activities} />
+            <RecentActivities activities={recent} />
           </Card>
         </div>
       </section>
@@ -187,3 +164,6 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
+
+
+

@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { attendanceWindow } from './attendanceWindow.js';
+import { useCollectionState, memoryCache, sessionIdentity } from '../../../api/memoryStore.js';
+import { useMemo, useState } from 'react';
 import { AlertTriangle, Check, ChevronLeft, ChevronRight, CreditCard, Save, Search, Users, X } from 'lucide-react';
 import StatCard from '../../components/StatCard';
 import Card from '../../components/Card';
@@ -16,28 +18,16 @@ import '../students/Students.scss';
 import './Attendance.scss';
 import useReceptionPermissions from '../../../Reception/useReceptionPermissions';
 
+import { useCurrentTime } from '../../useCurrentTime';
+
 const KEY = 'edu-attendance-v1';
 const MARKS = {
   p: { label: 'Keldi', icon: Check, tone: 'success' },
   a: { label: 'Kelmadi', icon: X, tone: 'danger' },
 };
 
-const loadRecords = () => {
-  try {
-    const saved = JSON.parse(localStorage.getItem(KEY)) || {};
-    return Object.fromEntries(Object.entries(saved).map(([lesson, marks]) => [
-      lesson,
-      Object.fromEntries(Object.entries(marks || {}).map(([studentId, mark]) => [
-        studentId,
-        mark === 'l' ? 'p' : mark === 'e' ? 'a' : mark,
-      ]).filter(([, mark]) => mark === 'p' || mark === 'a')),
-    ]));
-  } catch {
-    return {};
-  }
-};
-
 const Attendance = () => {
+  const timestamp = useCurrentTime();
   const toast = useToast();
   const hasPermission = useReceptionPermissions();
   const canEdit = hasPermission('attendance', 'edit');
@@ -45,26 +35,19 @@ const Attendance = () => {
   const { students, update: updateStudent } = useStudents();
   const { add: addPayment } = usePayments(students);
   const groups = useMemo(() => {
-    const assignedCodes = sessionStorage.getItem('educontrol_role') === 'teacher'
-      ? new Set(JSON.parse(localStorage.getItem('edu-teachers-v1') || '[]').find((teacher) => teacher.id === sessionStorage.getItem('educontrol_teacher_id'))?.groups ?? [])
+    const assignedCodes = sessionIdentity.getItem('educontrol_role') === 'teacher'
+      ? new Set(JSON.parse(memoryCache.getItem(sessionIdentity.getItem('educontrol_teacher_type') === 'support' ? 'edu-support-teachers-v1' : 'edu-teachers-v1') || '[]').find((teacher) => teacher.id === sessionIdentity.getItem('educontrol_teacher_id'))?.groups ?? [])
       : null;
     return loadGroups().filter((g) => g.status === 'active' && (!assignedCodes || assignedCodes.has(g.code)));
   }, []);
   const [code, setCode] = useState(groups[0]?.code ?? '');
-  const [date, setDate] = useState(isoDate(new Date()));
-  const [records, setRecords] = useState(loadRecords);
+  const [date, setDate] = useState(() => isoDate(new Date()));
+  const [records, setRecords] = useCollectionState(KEY);
   const [draft, setDraft] = useState(null);
   const [q, setQ] = useState('');
   const [paymentTarget, setPaymentTarget] = useState('');
   const [paymentAmount, setPaymentAmount] = useState('');
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(KEY, JSON.stringify(records));
-    } catch {
-      /* e'tiborsiz */
-    }
-  }, [records]);
 
   const group = groups.find((g) => g.code === code);
   const key = `${code}|${date}`;
@@ -75,6 +58,9 @@ const Attendance = () => {
   const current = draft?.key === key ? draft.map : records[key] ?? {};
   const dirty = draft?.key === key;
   const isLessonDay = group?.days.includes(parseIso(date).getDay());
+
+  const attendanceTime = attendanceWindow(group, date, timestamp);
+  const canMarkNow = isLessonDay && attendanceTime.allowed;
 
   const recentLessonDates = useMemo(() => {
     if (!group) return [];
@@ -92,12 +78,14 @@ const Attendance = () => {
   const debtors = roster.filter((s) => getPaymentStatus(s) !== 'paid').length;
   const rows = roster.filter((s) => `${s.lastName} ${s.firstName} ${s.id}`.toLowerCase().includes(q.trim().toLowerCase()));
 
-  const mark = (id, m) => { if (canEdit) setDraft({ key, map: { ...current, [id]: m } }); };
-  const markAll = (m) => { if (canEdit) setDraft({ key, map: Object.fromEntries(roster.map((s) => [s.id, m])) }); };
+  const mark = (id, m) => { if (canEdit && canMarkNow) setDraft({ key, map: { ...current, [id]: m } }); };
+  const markAll = (m) => { if (canEdit && canMarkNow) setDraft({ key, map: { ...current, ...Object.fromEntries(roster.map((s) => [s.id, m])) } }); };
   const save = () => {
-    if (!canEdit) return;
+    if (!canEdit || !canMarkNow) return;
     const wasSaved = Boolean(records[key]);
     const absent = roster.filter((s) => current[s.id] === 'a').length;
+    if (!current.lessonStatus) { toast.error('Dars holatini tanlang.'); return; }
+    setRecords((r) => ({ ...r, [key]: current }));
     logActivity({
       module: 'attendance',
       action: 'save',
@@ -111,7 +99,6 @@ const Attendance = () => {
         ? { category: 'attendance', priority: 'high', title: `${code}: kelmaganlar ko‘p`, message: `${date} sanasida ${absent}/${roster.length} talaba kelmadi`, link: '/admin/attendance' }
         : null,
     });
-    setRecords((r) => ({ ...r, [key]: current }));
     setDraft(null);
     toast.success(`${code} · davomat saqlandi (${marked}/${roster.length})`);
   };
@@ -134,7 +121,7 @@ const Attendance = () => {
       toast.error(`Summa 1 dan ${formatSom(debt)} gacha bo‘lishi kerak.`);
       return;
     }
-    const paidAt = isoDate(new Date());
+    const paidAt = isoDate(new Date(timestamp));
     addPayment({
       studentId: student.id,
       name: `${student.lastName} ${student.firstName}`,
@@ -197,13 +184,19 @@ const Attendance = () => {
             subtitle={group ? formatGroupSchedule(group) : ''}
             actions={
               <>
-                {canEdit && <button type="button" className="btn btn--secondary btn--sm" onClick={() => markAll('p')}>Hammasi keldi</button>}
-                {canEdit && <button type="button" className="btn btn--primary btn--sm" disabled={!dirty} onClick={save}><Save size={15} /> Saqlash</button>}
+                {canEdit && <select className={`att-lesson-status att-lesson-status--${current.lessonStatus || 'pending'}`} disabled={!canMarkNow} aria-label="Dars holati" value={current.lessonStatus || ''} onChange={(e) => setDraft({ key, map: { ...current, lessonStatus: e.target.value } })}>
+                  <option value="">Dars holatini tanlang</option>
+                  <option value="held">Dars o‘tildi</option>
+                  <option value="not_held">Dars o‘tilmadi</option>
+                </select>}
+                {canEdit && <button type="button" className="btn btn--secondary btn--sm" disabled={!canMarkNow} onClick={() => markAll('p')}>Hammasi keldi</button>}
+                {canEdit && <button type="button" className="btn btn--primary btn--sm" disabled={!dirty || !canMarkNow} onClick={save}><Save size={15} /> Saqlash</button>}
               </>
             }
           >
+            {isLessonDay && !attendanceTime.allowed && <div className="att-note"><AlertTriangle size={16}/>{attendanceTime.message}</div>}
             {!isLessonDay && group && (
-              <div className="att-note"><AlertTriangle size={16} /> Bu kun guruhning dars kuni emas — baribir belgilash mumkin.</div>
+              <div className="att-note"><AlertTriangle size={16} /> Bu kun guruhning dars kuni emas — davomat va dars holatini belgilash mumkin emas.</div>
             )}
             <div className="toolbar">
               <div className="toolbar__search">
@@ -224,7 +217,7 @@ const Attendance = () => {
                         {new Intl.DateTimeFormat('uz-UZ', { day: '2-digit', month: '2-digit' }).format(parseIso(lessonDate))}
                       </th>
                     ))}
-                    <th>{date === isoDate(new Date()) ? 'Bugungi davomat' : 'Davomat'}</th>
+                    <th>{date === isoDate(new Date(timestamp)) ? 'Bugungi davomat' : 'Davomat'}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -261,7 +254,7 @@ const Attendance = () => {
                         <td>
                           <div className="att-marks" role="group" aria-label={`${s.lastName} ${s.firstName} davomati`}>
                             {Object.entries(MARKS).map(([m, { label, icon: Icon, tone }]) => (
-                              <button key={m} type="button" title={label} aria-pressed={current[s.id] === m} disabled={!canEdit} className={`att-mark att-mark--${tone}${current[s.id] === m ? ' is-on' : ''}`} onClick={() => mark(s.id, m)}>
+                              <button key={m} type="button" title={label} aria-pressed={current[s.id] === m} disabled={!canEdit || !canMarkNow} className={`att-mark att-mark--${tone}${current[s.id] === m ? ' is-on' : ''}`} onClick={() => mark(s.id, m)}>
                                 <Icon size={15} /><span>{label}</span>
                               </button>
                             ))}

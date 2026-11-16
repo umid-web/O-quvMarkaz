@@ -4,10 +4,19 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "test:api": "node --test Back-end/tests/*.test.js",
+    "verify": "npm run lint && npm run test:api && npm run build",
+    "db:backup": "node --env-file-if-exists=Back-end/.env Back-end/backup.js",
     "dev": "vite",
     "build": "vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "api": "node --env-file-if-exists=Back-end/.env Back-end/index.js",
+    "api:dev": "node --watch --env-file-if-exists=Back-end/.env Back-end/index.js",
+    "start": "node --env-file-if-exists=Back-end/.env Back-end/index.js"
+  },
+  "engines": {
+    "node": ">=24.0.0"
   },
   "dependencies": {
     "axios": "^1.20.0",

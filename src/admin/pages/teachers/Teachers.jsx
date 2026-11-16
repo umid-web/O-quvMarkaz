@@ -1,4 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTableSelection } from '../../hooks/useTableSelection.js';
+import { useCourses } from '../courses/coursesStore';
+import { matchesCourse, activeCourseNames } from '../courses/courseMatching';
+import { useCollectionState } from '../../../api/memoryStore.js';
+import { useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
   ArrowDown,
@@ -35,7 +39,6 @@ import { useTeachers } from './teachersStore';
 import {
   GROUP_LIST,
   SALARY_TYPES,
-  SUBJECTS,
   TEACHER_STATUSES,
   TEACHER_STATUS_OPTIONS,
   getTeacherStats,
@@ -43,6 +46,7 @@ import {
 } from './teachersData';
 import '../students/Students.scss';
 import './Teachers.scss';
+import { canSeeEmployeeSalary } from '../../../auth/salaryPrivacy';
 
 const DEFAULT_FILTERS = { status: 'all', subject: 'all', groups: 'all' };
 
@@ -64,6 +68,9 @@ const matchesQuery = (t, q) => {
 };
 
 const Teachers = () => {
+  const { courses } = useCourses();
+  const courseNames = activeCourseNames(courses);
+
   const receptionView = useLocation().pathname.startsWith('/reception');
   const toast = useToast();
   const { teachers, add, update, remove, restore, setStatus } = useTeachers();
@@ -73,18 +80,18 @@ const Teachers = () => {
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [sort, setSort] = useState({ key: 'name', dir: 'asc' });
-  const [selected, setSelected] = useState(() => new Set());
 
   const [form, setForm] = useState({ open: false, teacher: null });
   const [viewId, setViewId] = useState(null);
   const [toDelete, setToDelete] = useState(null);
 
   // ---------- Hisoblangan ma'lumotlar ----------
+  const [receivedPayments] = useCollectionState('edu-payments-v1');
   const statsById = useMemo(() => {
     const map = new Map();
-    for (const t of teachers) map.set(t.id, getTeacherStats(t, students));
+    for (const t of teachers) map.set(t.id, getTeacherStats(t, students, receivedPayments));
     return map;
-  }, [teachers, students]);
+  }, [teachers, students, receivedPayments]);
 
   const summary = useMemo(() => {
     const working = teachers.filter((t) => t.status === 'active');
@@ -108,7 +115,7 @@ const Teachers = () => {
     const list = teachers.filter(
       (t) =>
         (filters.status === 'all' || t.status === filters.status) &&
-        (filters.subject === 'all' || t.subjects.includes(filters.subject)) &&
+        (filters.subject === 'all' || matchesCourse(t, filters.subject, courses)) &&
         (filters.groups === 'all' || (filters.groups === 'with' ? t.groups.length > 0 : t.groups.length === 0)) &&
         matchesQuery(t, q),
     );
@@ -121,24 +128,16 @@ const Teachers = () => {
     };
     const dir = sort.dir === 'asc' ? 1 : -1;
     return [...list].sort((a, b) => sorters[sort.key](a, b) * dir || a.id.localeCompare(b.id));
-  }, [teachers, query, filters, sort, statsById]);
+  }, [teachers, query, filters, sort, statsById, courses]);
   const rows = filtered;
 
   const hasFilters = query.trim() !== '' || Object.keys(DEFAULT_FILTERS).some((k) => filters[k] !== DEFAULT_FILTERS[k]);
   const viewTeacher = teachers.find((t) => t.id === viewId) ?? null;
 
-  const pageSelected = rows.length > 0 && rows.every((t) => selected.has(t.id));
-  const pageSome = rows.some((t) => selected.has(t.id));
-  const headCheckbox = useRef(null);
-  useEffect(() => {
-    if (headCheckbox.current) headCheckbox.current.indeterminate = pageSome && !pageSelected;
-  }, [pageSome, pageSelected]);
+  const { selected, setSelected, pageSelected, headCheckbox, toggleOne, togglePage } = useTableSelection(rows);
 
   // ---------- Filtr / saralash ----------
-  const resetView = () => {
-    
-    setSelected(new Set());
-  };
+  const resetView = () => setSelected(new Set());
   const changeQuery = (value) => {
     setQuery(value);
     resetView();
@@ -154,23 +153,7 @@ const Teachers = () => {
   };
   const toggleSort = (key) => {
     setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }));
-    
   };
-
-  // ---------- Tanlash ----------
-  const toggleOne = (id) =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  const togglePage = () =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      rows.forEach((t) => (pageSelected ? next.delete(t.id) : next.add(t.id)));
-      return next;
-    });
 
   // ---------- Amallar ----------
   const handleSubmit = (data) => {
@@ -185,7 +168,6 @@ const Teachers = () => {
       const created = add(payload);
       toast.success(`${teacherName(created)} qo‘shildi (${created.id})`);
       setSort({ key: 'name', dir: 'asc' });
-      
     }
     if (releasing) toast.info(`${data.groups.length} ta guruh ustozsiz qoldi — yangi ustoz biriktiring`);
     setForm({ open: false, teacher: null });
@@ -239,7 +221,7 @@ const Teachers = () => {
         t.id, t.lastName, t.firstName, t.gender === 'female' ? 'Ayol' : 'Erkak', formatDate(t.birthDate),
         formatPhone(t.phone), t.subjects.join(', '), t.groups.join(', '), st.studentCount,
         TEACHER_STATUSES[t.status].label, SALARY_TYPES.find((s) => s.value === t.salaryType)?.label ?? '',
-        t.salaryValue, st.salary, t.experience, formatDate(t.hiredAt), t.address,
+        t.salaryValue, canSeeEmployeeSalary('main', t.id) ? st.salary : '', t.experience, formatDate(t.hiredAt), t.address,
       ];
     });
     downloadCsv('ustozlar.csv', [header, ...body]);
@@ -279,7 +261,7 @@ const Teachers = () => {
         <StatCard title="Jami ustozlar" value={formatNumber(summary.total)} icon={Users} tone="primary" />
         <StatCard title="Ishlayotgan ustozlar" value={formatNumber(summary.active)} icon={UserCheck} tone="success" />
         <StatCard title="Ustozsiz guruhlar" value={formatNumber(summary.unassigned)} icon={AlertTriangle} tone="warning" />
-        {!receptionView && <StatCard title="Oylik ish haqi fondi" value={formatMoney(summary.salaryFund)} icon={Wallet} tone="danger" />}
+        {!receptionView && canSeeEmployeeSalary('all') && <StatCard title="Oylik ish haqi fondi" value={formatMoney(summary.salaryFund)} icon={Wallet} tone="danger" />}
       </section>
 
       <Card className="students-card">
@@ -314,7 +296,7 @@ const Teachers = () => {
             </div>
             <select className="input" aria-label="Fan" value={filters.subject} onChange={(e) => changeFilter('subject', e.target.value)}>
               <option value="all">Barcha fanlar</option>
-              {SUBJECTS.map((s) => <option key={s} value={s}>{s}</option>)}
+              {courseNames.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
             <select className="input" aria-label="Guruh biriktirilganligi" value={filters.groups} onChange={(e) => changeFilter('groups', e.target.value)}>
               <option value="all">Barcha ustozlar</option>
@@ -444,7 +426,7 @@ const Teachers = () => {
                       <td className="is-right">{formatNumber(st.studentCount)}</td>
                       <td><span className={`badge badge--dot badge--${status.tone}`}>{status.label}</span></td>
                       <td className="col-xl is-right data-table__muted">
-                        {t.status === 'left' ? '—' : formatSom(st.salary)}
+                        {t.status === 'left' || !canSeeEmployeeSalary('main', t.id) ? '—' : formatSom(st.salary)}
                       </td>
                       <td className="data-table__actions">
                         <RowMenu items={menuItems(t)} label={`${teacherName(t)} uchun amallar`} />
@@ -471,7 +453,7 @@ const Teachers = () => {
       <TeacherDrawer
         teacher={viewTeacher}
         students={students}
-        hideSalary={receptionView}
+        hideSalary={receptionView || !canSeeEmployeeSalary('main', viewTeacher?.id)}
         readOnly={receptionView}
         onClose={() => setViewId(null)}
         onEdit={(t) => setForm({ open: true, teacher: t })}

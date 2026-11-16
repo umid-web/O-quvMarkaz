@@ -10,6 +10,7 @@
 import { ALL_GROUPS, COURSES, GROUPS, getGroup } from '../students/studentsData';
 import { GROUP_LIST, groupsOverlap, teacherName } from '../teachers/teachersData';
 import { WEEK_DAYS } from '../support-teachers/supportData';
+export { eligiblePeople } from '../teachers/teacherAssignment';
 
 export { WEEK_DAYS, teacherName };
 
@@ -122,5 +123,3 @@ export const supportProblem = (person, draft) => {
 export const findRoomConflict = (groups, draft) =>
   groups.find((g) => g.code !== draft.code && g.status === 'active' && g.room.trim().toLowerCase() === draft.room.trim().toLowerCase() && groupsOverlap(g, draft)) ?? null;
 
-/** Fan mos va ishdan ketmagan ustozlar (asosiy / qo‘shimcha ro‘yxatlar uchun). */
-export const eligiblePeople = (list, course) => list.filter((p) => p.status !== 'left' && p.subjects.includes(course));

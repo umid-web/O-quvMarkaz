@@ -11,6 +11,13 @@ node_modules
 dist
 dist-ssr
 *.local
+Back-end/data/
+backups/
+.educontrol-backup-*/
+.tmp/browser-check/
+.env
+.env.*
+!.env.example
 
 # Editor directories and files
 .vscode/*

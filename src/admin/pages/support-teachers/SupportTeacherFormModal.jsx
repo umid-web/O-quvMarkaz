@@ -1,19 +1,21 @@
 import { useMemo, useState } from 'react';
 import Modal from '../../components/ui/Modal';
+import AssignmentSelect from '../groups/AssignmentSelect';
+import { parseSubjects } from '../teachers/teacherAssignment';
 import { maskPhoneInput, phoneDigits } from '../../utils/format';
-import { GENDERS, formatSchedule } from '../students/studentsData';
+import { GENDERS } from '../students/studentsData';
 import { loadTeachers, findTeacherByGroup } from '../teachers/teachersStore';
+import { loadGroups } from '../groups/groupsStore';
+import { formatGroupSchedule } from '../groups/groupsData';
+import { groupsOverlap } from '../teachers/teachersData';
+import { canSeeEmployeeSalary } from '../../../auth/salaryPrivacy';
 import {
-  GROUP_LIST,
   PAY_TYPES,
   PAY_STATUS_OPTIONS,
-  SUBJECTS,
   SUPPORT_ROLES,
   SUPPORT_ROLE_OPTIONS,
   SUPPORT_STATUS_OPTIONS,
   WEEK_DAYS,
-  findAvailabilityConflict,
-  findScheduleConflict,
   teacherName,
 } from './supportData';
 
@@ -27,6 +29,7 @@ const EMPTY = {
   phone: '',
   address: '',
   role: 'assistant',
+  level: '',
   subjects: [],
   groups: [],
   availableDays: [],
@@ -49,21 +52,26 @@ const toForm = (person) =>
       }
     : { ...EMPTY, startedAt: todayIso() };
 
-const validate = (f) => {
+const validate = (f, groups) => {
   const e = {};
   if (f.firstName.trim().length < 2) e.firstName = 'Ism kamida 2 ta belgidan iborat bo‘lsin';
   if (f.lastName.trim().length < 2) e.lastName = 'Familiya kamida 2 ta belgidan iborat bo‘lsin';
   if (phoneDigits(f.phone).length !== 12) e.phone = 'Telefon raqamini to‘liq kiriting';
   if (f.birthDate && f.birthDate > todayIso()) e.birthDate = 'Tug‘ilgan sana kelajakda bo‘lishi mumkin emas';
   if (!f.startedAt) e.startedAt = 'Ishga kirgan sanani kiriting';
-  if (f.subjects.length === 0) e.subjects = 'Kamida bitta fan tanlang';
+  if (f.subjects.length === 0) e.subjects = 'Kamida bitta fan yozing';
   const pay = Number(f.payValue);
   if (!Number.isFinite(pay) || pay < 0) e.payValue = 'Qiymat manfiy bo‘lishi mumkin emas';
-  const conflict = findScheduleConflict(f.groups);
+  const selected = f.groups.map((code) => groups.find((group) => group.code === code)).filter(Boolean);
+  let conflict = null;
+  for (let i = 0; i < selected.length && !conflict; i++) {
+    const other = selected.slice(i + 1).find((group) => groupsOverlap(selected[i], group));
+    if (other) conflict = [selected[i].code, other.code];
+  }
   if (conflict) {
     e.groups = `${conflict[0]} va ${conflict[1]} guruhlarining dars vaqti bir-biriga to‘g‘ri keladi`;
   } else {
-    const off = findAvailabilityConflict(f.groups, f.availableDays);
+    const off = f.availableDays.length ? selected.find((group) => group.days.some((day) => !f.availableDays.includes(day)))?.code : null;
     if (off) e.groups = `${off} guruhining dars kunlari ustozning ish kunlariga to‘g‘ri kelmaydi`;
   }
   return e;
@@ -86,33 +94,21 @@ const Field = ({ label, required, error, hint, children }) => (
  */
 const FormBody = ({ person, onClose, onSubmit }) => {
   const isEdit = Boolean(person);
-  const [form, setForm] = useState(() => toForm(person));
+  const showSalary = canSeeEmployeeSalary('support', person?.id);
+  const allGroups = useMemo(() => loadGroups(), []);
+  const [form, setForm] = useState(() => {
+    const initial = toForm(person);
+    return { ...initial, groups: initial.groups.filter((code) => allGroups.some((group) => group.code === code)) };
+  });
+  const [subjectsText, setSubjectsText] = useState(() => (person?.subjects || []).join(', '));
   const [errors, setErrors] = useState({});
-  const teachers = useMemo(loadTeachers, []);
+  const teachers = useMemo(() => loadTeachers(), []);
 
   const set = (name, value) => {
     setForm((f) => ({ ...f, [name]: value }));
     if (errors[name]) setErrors((e) => ({ ...e, [name]: undefined }));
   };
   const bind = (name) => ({ value: form[name], onChange: (e) => set(name, e.target.value) });
-
-  const toggleSubject = (name) => {
-    setForm((f) => {
-      const has = f.subjects.includes(name);
-      const subjects = has ? f.subjects.filter((x) => x !== name) : [...f.subjects, name];
-      const groups = has ? f.groups.filter((code) => GROUP_LIST.find((g) => g.code === code)?.course !== name) : f.groups;
-      return { ...f, subjects, groups };
-    });
-    setErrors((e) => ({ ...e, subjects: undefined, groups: undefined }));
-  };
-
-  const toggleGroup = (code) => {
-    setForm((f) => ({
-      ...f,
-      groups: f.groups.includes(code) ? f.groups.filter((c) => c !== code) : [...f.groups, code],
-    }));
-    setErrors((e) => ({ ...e, groups: undefined }));
-  };
 
   const toggleDay = (day) => {
     setForm((f) => ({
@@ -124,7 +120,9 @@ const FormBody = ({ person, onClose, onSubmit }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const found = validate(form);
+    const subjects = parseSubjects(subjectsText);
+    const found = validate({ ...form, subjects }, allGroups);
+    if (form.groups.some((code) => !allGroups.some((group) => group.code === code))) found.groups = 'Faqat mavjud guruhni tanlang';
     setErrors(found);
     if (Object.keys(found).length) {
       document.querySelector('.student-form .has-error .input, .student-form .has-error button')?.focus();
@@ -139,7 +137,8 @@ const FormBody = ({ person, onClose, onSubmit }) => {
       phone: phoneDigits(form.phone),
       address: form.address.trim(),
       role: form.role,
-      subjects: form.subjects,
+      level: form.level.trim(),
+      subjects,
       groups: form.status === 'left' ? [] : form.groups,
       availableDays: [...form.availableDays].sort((a, b) => a - b),
       status: form.status,
@@ -151,7 +150,7 @@ const FormBody = ({ person, onClose, onSubmit }) => {
     });
   };
 
-  const availableGroups = GROUP_LIST.filter((g) => form.subjects.includes(g.course));
+  const availableGroups = allGroups.filter((group) => group.status !== 'archived' || person?.groups?.includes(group.code));
 
   return (
     <Modal
@@ -208,6 +207,9 @@ const FormBody = ({ person, onClose, onSubmit }) => {
               {SUPPORT_ROLE_OPTIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
             </select>
           </Field>
+          <Field label="Darajasi" hint="Masalan: IELTS 8.0, CEFR C1, oliy toifa">
+            <input className="input" {...bind('level')} maxLength={100} placeholder="Darajasini kiriting" />
+          </Field>
           <Field label="Holati">
             <select className="input" {...bind('status')}>
               {SUPPORT_STATUS_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
@@ -220,19 +222,8 @@ const FormBody = ({ person, onClose, onSubmit }) => {
           <div className="student-form__wide">
             <div className={errors.subjects ? 'field has-error' : 'field'}>
               <span className="field__label">Yordam beradigan fanlari<abbr title="Majburiy">*</abbr></span>
-              <div className="chips" role="group" aria-label="Fanlar">
-                {SUBJECTS.map((name) => (
-                  <button
-                    key={name}
-                    type="button"
-                    className={form.subjects.includes(name) ? 'chip is-active' : 'chip'}
-                    aria-pressed={form.subjects.includes(name)}
-                    onClick={() => toggleSubject(name)}
-                  >
-                    {name}
-                  </button>
-                ))}
-              </div>
+              <input className="input" aria-label="Dars beradigan fanlari" value={subjectsText} onChange={(event) => { setSubjectsText(event.target.value); setErrors((previous) => ({ ...previous, subjects: undefined })); }} placeholder="Masalan: Ingliz tili, IELTS, CEFR" />
+              <span className="field__hint">Fanlarni o‘zingiz yozing. Bir nechta fanni vergul bilan ajrating.</span>
               {errors.subjects && <span className="field__error" role="alert">{errors.subjects}</span>}
             </div>
           </div>
@@ -265,32 +256,38 @@ const FormBody = ({ person, onClose, onSubmit }) => {
               {form.status === 'left' ? (
                 <span className="field__hint">Ketgan ustozga guruh biriktirilmaydi.</span>
               ) : availableGroups.length === 0 ? (
-                <span className="field__hint">Guruh biriktirish uchun avval fan(lar)ni tanlang. O‘rinbosar ustozga guruh shart emas.</span>
+                <span className="field__hint">Hozircha faol guruh yo‘q. O‘rinbosar ustozga guruh shart emas.</span>
               ) : (
-                <div className="group-options">
-                  {availableGroups.map((g) => {
-                    const checked = form.groups.includes(g.code);
+                <AssignmentSelect label="Guruh" value={form.groups} options={availableGroups.map((g) => {
                     const main = findTeacherByGroup(teachers, g.code);
-                    return (
-                      <label key={g.code} className={`group-option${checked ? ' is-checked' : ''}`}>
-                        <input type="checkbox" checked={checked} onChange={() => toggleGroup(g.code)} />
-                        <span className="group-option__text">
-                          <strong>{g.code} <span>· {g.course}</span></strong>
-                          <span>{formatSchedule(g.code)}</span>
-                          <span>{main ? `Asosiy ustoz: ${teacherName(main)}` : 'Asosiy ustoz yo‘q'}</span>
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
+                    return { value: g.code, label: `${g.code} · ${g.course} · ${formatGroupSchedule(g)}${main ? ` · ${teacherName(main)}` : ''}` };
+                  })} onChange={(groups) => set('groups', groups)} />
               )}
               {errors.groups && <span className="field__error" role="alert">{errors.groups}</span>}
+              {form.status !== 'left' && form.groups.map((code) => {
+                const group = allGroups.find((item) => item.code === code);
+                if (!group) return null;
+                const main = findTeacherByGroup(teachers, code);
+                return <details key={code} className="support-group-preview" open>
+                  <summary>{code} — Guruh ma’lumotlari</summary>
+                  <dl>
+                    <div><dt>Kurs</dt><dd>{group.course}</dd></div>
+                    <div><dt>Dars jadvali</dt><dd>{formatGroupSchedule(group)}</dd></div>
+                    <div><dt>Xona</dt><dd>{group.room || 'Belgilanmagan'}</dd></div>
+                    <div><dt>Asosiy ustoz</dt><dd>{main ? teacherName(main) : 'Biriktirilmagan'}</dd></div>
+                    <div><dt>Sig‘imi</dt><dd>{group.capacity ? `${group.capacity} talaba` : 'Belgilanmagan'}</dd></div>
+                    <div><dt>Holati</dt><dd>{group.status === 'archived' ? 'Arxivda' : 'Faol'}</dd></div>
+                  </dl>
+                  {group.note && <p>{group.note}</p>}
+                </details>;
+              })}
             </div>
           </div>
         </fieldset>
 
         <fieldset className="student-form__section">
-          <legend>To‘lov</legend>
+          <legend>{showSalary ? 'To‘lov' : 'Qo‘shimcha ma’lumot'}</legend>
+          {showSalary && <>
           <Field label="Hisoblash usuli">
             <select className="input" {...bind('payType')}>
               {PAY_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -311,6 +308,7 @@ const FormBody = ({ person, onClose, onSubmit }) => {
               ))}
             </select>
           </Field>
+          </>}
 
           <div className="student-form__wide">
             <Field label="Izoh">

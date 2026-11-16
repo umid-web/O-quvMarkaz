@@ -6,34 +6,34 @@
   color-scheme: light;
 
   // Asosiy palitra: ko‘k · yashil · to‘q sariq · oq
-  --bg: #f5f8fc;
-  --surface: #ffffff;
-  --surface-2: #f6f9fd;
-  --border: #e3e9f2;
-  --text: #0f1f38;
-  --text-muted: #5f6f86;
+  --bg: #d5dce2;
+  --surface: #e3e8ec;
+  --surface-2: #dbe2e8;
+  --border: #c2ccd6;
+  --text: #233044;
+  --text-muted: #5c6c82;
 
-  --primary: #1d6fe0;
+  --primary: #2874d1;
   --primary-hover: #155bbd;
-  --primary-soft: #e8f1fd;
+  --primary-soft: #d0ddec;
   --on-primary: #ffffff;
 
   --success: #15803d;
-  --success-soft: #e5f6ec;
+  --success-soft: #d5e7dc;
   --warning: #c2570c;
-  --warning-soft: #fff0e0;
+  --warning-soft: #ecdfcd;
   --accent: #f97316;
   --danger: #b91c1c;
-  --danger-soft: #fde8e8;
+  --danger-soft: #ecd8da;
   --info: #1d6fe0;
-  --info-soft: #e8f1fd;
+  --info-soft: #d6e1ee;
 
-  --sidebar-bg: #ffffff;
-  --sidebar-text: #5f6f86;
+  --sidebar-bg: #dce3e9;
+  --sidebar-text: #384c64;
   --sidebar-text-active: #0f1f38;
-  --sidebar-hover: #eef4fd;
+  --sidebar-hover: #cdd7e1;
   --sidebar-active: #1d6fe0;
-  --sidebar-border: #e3e9f2;
+  --sidebar-border: #c2ccd6;
 
   --chart-1: #1d6fe0;
   --chart-2: #22a559;
@@ -50,16 +50,16 @@
 [data-theme='dark'] {
   color-scheme: dark;
 
-  --bg: #0b1424;
-  --surface: #121d31;
-  --surface-2: #17243b;
-  --border: #233450;
+  --bg: #11161f;
+  --surface: #1a222e;
+  --surface-2: #232d3b;
+  --border: #303b4b;
   --text: #e8eef8;
   --text-muted: #93a3bb;
 
   --primary: #5aa0ff;
   --primary-hover: #7db5ff;
-  --primary-soft: rgba(90, 160, 255, 0.16);
+  --primary-soft: rgba(90, 160, 255, 0.11);
   --on-primary: #06121f;
 
   --success: #4ade80;
@@ -72,7 +72,7 @@
   --info: #5aa0ff;
   --info-soft: rgba(90, 160, 255, 0.16);
 
-  --sidebar-bg: #0e192d;
+  --sidebar-bg: #151d28;
   --sidebar-text: #8b9cb5;
   --sidebar-text-active: #ffffff;
   --sidebar-hover: rgba(255, 255, 255, 0.06);
@@ -85,8 +85,8 @@
   --chart-4: #f87171;
   --chart-5: #8fbfff;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.12);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.2);
   --overlay: rgba(0, 0, 0, 0.6);
   --shadow-lg: 0 18px 48px rgba(0, 0, 0, 0.55);
 }
@@ -106,6 +106,21 @@ body {
 :focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
+}
+
+.skip-link {
+  position: fixed;
+  top: .75rem;
+  left: .75rem;
+  z-index: 10000;
+  transform: translateY(-200%);
+  padding: .75rem 1rem;
+  border-radius: .5rem;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-md);
+
+  &:focus { transform: translateY(0); }
 }
 
 ::selection {
@@ -138,7 +153,7 @@ body {
   background: var(--surface);
   color: var(--text-muted);
   cursor: pointer;
-  transition: all $transition-base;
+  transition: color $transition-base, background-color $transition-base, border-color $transition-base;
 
   &:hover {
     color: var(--primary);
@@ -151,17 +166,19 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
   height: 38px;
   padding: 0 1.1rem;
   border: 1px solid transparent;
   border-radius: $radius-sm;
   font-weight: 500;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
-  transition: all $transition-base;
+  transition: color $transition-base, background-color $transition-base, border-color $transition-base;
+
+  svg { flex-shrink: 0; width: 16px; height: 16px; stroke-width: 1.8; }
 
   &:disabled {
     opacity: 0.55;
@@ -191,7 +208,7 @@ body {
 
   &--danger {
     background: var(--danger);
-    color: var(--on-primary);
+    color: #fff;
 
     &:hover:not(:disabled) {
       filter: brightness(1.1);
@@ -286,6 +303,7 @@ body {
 
 .input {
   width: 100%;
+  min-width: 0;
   height: 40px;
   padding: 0 0.85rem;
   border: 1px solid var(--border);
@@ -355,4 +373,20 @@ input[type='checkbox'] {
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
+}
+
+@media (max-width: 600px) {
+  body { font-size: 14px; }
+  .input { font-size: 16px; }
+  .btn { padding-inline: 0.85rem; font-size: 0.8rem; }
+  .badge { padding: 0.15rem 0.5rem; font-size: 0.69rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

@@ -30,7 +30,7 @@ const Row = ({ icon: Icon, label, children }) => (
 
 /** Qo‘shimcha ustoz profili — yon panel: ma'lumotlar, haftalik jadval, guruhlar va to‘lov hisobi. */
 const SupportTeacherDrawer = ({ person, students, onClose, onEdit, onDelete, hideSalary = false, readOnly = false }) => {
-  const mainTeachers = useMemo(loadTeachers, []);
+  const mainTeachers = useMemo(() => loadTeachers(), []);
 
   const timetable = useMemo(() => {
     if (!person) return [];
@@ -104,6 +104,7 @@ const SupportTeacherDrawer = ({ person, students, onClose, onEdit, onDelete, hid
           <Row icon={Phone} label="Telefon">{formatPhone(person.phone)}</Row>
           <Row icon={MapPin} label="Manzil">{person.address || '—'}</Row>
           <Row icon={BookOpen} label="Fanlari">{person.subjects.join(', ')}</Row>
+          <Row icon={BookOpen} label="Darajasi">{person.level || 'Kiritilmagan'}</Row>
           <Row icon={CalendarCheck} label="Ish kunlari">
             {person.availableDays.length ? person.availableDays.map(weekdayShort).join(' · ') : 'Istalgan kun'}
           </Row>

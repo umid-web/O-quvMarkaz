@@ -1,16 +1,41 @@
 @use '../../styles/variables' as *;
 
+.att-lesson-status {
+  min-height: 36px; max-width: 100%; padding: 0.45rem 0.75rem; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--surface-2); color: var(--text); font: inherit; font-size: 0.8rem;
+  cursor: pointer; transition: border-color 150ms;
+  &:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+  &--held { border-color: var(--success); color: var(--success); }
+  &--not_held { border-color: var(--danger); color: var(--danger); }
+  option { background: var(--surface); color: var(--text); }
+}
+
 .att-date { align-items: center; .input { width: auto; } }
-.att-layout { display: grid; grid-template-columns: 290px minmax(0, 1fr); gap: $spacing-md; align-items: start; @include respond($bp-lg) { grid-template-columns: 1fr; } }
+.att-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: $spacing-md; align-items: start; @include respond($bp-lg) { grid-template-columns: 1fr; } }
 .att-main { display: flex; flex-direction: column; gap: $spacing-md; min-width: 0; .students-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); @include respond($bp-md) { grid-template-columns: repeat(2, minmax(0, 1fr)); } } }
 .att-groups { display: flex; flex-direction: column; gap: $spacing-sm; @include respond($bp-lg) { flex-direction: row; overflow-x: auto; padding-bottom: 4px; } }
 .att-group {
-  display: flex; flex-direction: column; gap: 0.35rem; min-width: 230px; padding: 0.85rem 1rem; text-align: left;
+  display: flex; flex-direction: column; gap: 0.3rem; min-width: 210px; padding: 0.65rem 0.8rem; text-align: left;
   border: 1px solid var(--border); border-radius: $radius-md; background: var(--surface); color: var(--text); cursor: pointer; transition: all $transition-base;
   &:hover { border-color: var(--primary); }
   &.is-active { border-color: var(--primary); background: var(--primary-soft); box-shadow: var(--shadow-sm); }
   &__top { display: flex; justify-content: space-between; align-items: center; }
   &__meta { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.82rem; color: var(--text-muted); }
+}
+
+.att-group__top { gap: 0.5rem; font-size: 0.8rem; }
+.att-group__top strong { font-weight: 600; }
+.att-group__meta { font-size: 0.72rem; }
+.att-mark { font-size: 0.72rem; padding: 0.3rem 0.5rem; }
+.att-note { font-size: 0.75rem; align-items: flex-start; }
+.att-note > svg { flex-shrink: 0; }
+@media (max-width: 600px) {
+  .att-date { flex-wrap: wrap; gap: 0.4rem; }
+  .att-date .input { min-width: 0; max-width: 100%; }
+  .att-group { flex-shrink: 0; min-width: 190px; }
+  .att-main .students-stats { grid-template-columns: 1fr; }
+  .att-mark { min-width: 34px; min-height: 34px; justify-content: center; }
+  .att-note { margin-inline: 0.75rem; }
 }
 .att-note { display: flex; gap: 0.5rem; align-items: center; margin: 0 1.25rem; padding: 0.45rem 0.7rem; border-radius: $radius-sm; background: var(--warning-soft); color: var(--warning); font-size: 0.82rem; }
 .students-card .toolbar { gap: 0.5rem; padding: 0.65rem 1.25rem; }

@@ -1,3 +1,4 @@
+import { sessionIdentity } from '../../api/memoryStore.js';
 import { useEffect, useState } from 'react';
 import { Sun, Moon, Search, Menu, KeyRound, MessageCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -9,17 +10,17 @@ import './Header.scss';
 const Header = ({ onMenuClick = () => {}, userName = 'Administrator', roleName = 'Admin' }) => {
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === 'dark';
-  const role = sessionStorage.getItem('educontrol_role');
+  const role = sessionIdentity.getItem('educontrol_role');
   const chatPath = role === 'teacher' ? '/teacher/chat' : role === 'reception' ? '/reception/chat' : '/admin/chat';
   const [unreadChat, setUnreadChat] = useState(() => getUnreadChatCount(getCurrentChatActorKey()));
 
   useEffect(() => {
     const refresh = () => setUnreadChat(getUnreadChatCount(getCurrentChatActorKey()));
     refresh();
-    window.addEventListener('storage', refresh);
+    window.addEventListener('educontrol:collection', refresh);
     window.addEventListener('edu-chat-update', refresh);
     const timer = window.setInterval(refresh, 1800);
-    return () => { window.removeEventListener('storage', refresh); window.removeEventListener('edu-chat-update', refresh); window.clearInterval(timer); };
+    return () => { window.removeEventListener('educontrol:collection', refresh); window.removeEventListener('edu-chat-update', refresh); window.clearInterval(timer); };
   }, []);
 
   return (

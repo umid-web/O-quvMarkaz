@@ -62,16 +62,17 @@ $course-colors: primary, success, warning, danger;
 
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
-  padding: 1.1rem 1.2rem 1.2rem;
+  gap: 0.7rem;
+  min-width: 0;
+  padding: 0.9rem 1rem;
   border: 1px solid var(--border);
-  border-top: 3px solid var(--accent-color);
-  border-radius: $radius-lg;
+  border-top: 2px solid var(--accent-color);
+  border-radius: 11px;
   background: var(--surface);
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow $transition-base, transform $transition-base;
+  box-shadow: none;
+  transition: border-color $transition-base;
 
-  &:hover { box-shadow: var(--shadow-md); }
+  &:hover { border-color: color-mix(in srgb, var(--accent-color) 35%, var(--border)); }
   &.is-archived { opacity: 0.7; border-top-color: var(--border); }
 
   @each $name in $course-colors {
@@ -91,9 +92,10 @@ $course-colors: primary, success, warning, danger;
     display: grid;
     place-items: center;
     flex-shrink: 0;
-    width: 40px;
-    height: 40px;
-    border-radius: 10px;
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    svg { width: 18px; height: 18px; stroke-width: 1.7; }
     background: var(--accent-soft);
     color: var(--accent-color);
   }
@@ -102,7 +104,7 @@ $course-colors: primary, success, warning, danger;
     flex: 1;
     min-width: 0;
 
-    h3 { font-size: 1rem; font-weight: 700; }
+    h3 { font-size: 0.88rem; font-weight: 600; }
 
     h3 button {
       max-width: 100%;
@@ -120,14 +122,14 @@ $course-colors: primary, success, warning, danger;
       &:hover { color: var(--accent-color); }
     }
 
-    span { font-size: 0.78rem; color: var(--text-muted); }
+    span { font-size: 0.7rem; color: var(--text-muted); }
   }
 
   &__desc {
     display: -webkit-box;
     min-height: 3.9em;
     overflow: hidden;
-    font-size: 0.85rem;
+    font-size: 0.78rem;
     line-height: 1.5;
     color: var(--text-muted);
     -webkit-line-clamp: 3;
@@ -139,7 +141,7 @@ $course-colors: primary, success, warning, danger;
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
-    font-size: 0.82rem;
+    font-size: 0.72rem;
     color: var(--text-muted);
 
     span:first-child { display: inline-flex; align-items: center; gap: 0.35rem; }
@@ -149,14 +151,17 @@ $course-colors: primary, success, warning, danger;
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    padding: 0.6rem 0.8rem;
-    border-radius: $radius-md;
-    background: var(--accent-soft);
-    font-size: 0.82rem;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    padding: 0.5rem 0.65rem;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--accent-soft) 65%, var(--surface));
+    font-size: 0.72rem;
     color: var(--text-muted);
 
     strong {
-      font-size: 1.02rem;
+      font-size: 0.9rem;
+      font-weight: 600;
       color: var(--accent-color);
       font-variant-numeric: tabular-nums;
     }
@@ -164,28 +169,54 @@ $course-colors: primary, success, warning, danger;
 
   &__stats {
     display: grid;
-    grid-template-columns: auto auto auto;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     justify-content: space-between;
     gap: 0.5rem;
-    padding-top: 0.8rem;
+    padding-top: 0.6rem;
     border-top: 1px solid var(--border);
 
     dt {
       display: flex;
       align-items: center;
       gap: 0.25rem;
-      font-size: 0.72rem;
+      font-size: 0.64rem;
       color: var(--text-muted);
     }
 
     dd {
-      margin-top: 0.15rem;
-      font-size: 0.95rem;
+      margin: 0.2rem 0 0;
+      font-size: 0.8rem;
       font-weight: 600;
       font-variant-numeric: tabular-nums;
-      white-space: nowrap;
+      overflow-wrap: anywhere;
     }
   }
+}
+
+.courses-page {
+  .page-head { align-items: center; }
+  .page-head h1 { font-size: 1.4rem; font-weight: 600; }
+  .page-head p { font-size: 0.8rem; }
+  .page-head__actions .btn { height: 34px; font-size: 0.78rem; }
+  .stat-card { padding: 0.85rem 1rem; box-shadow: none; }
+  .stat-card__title { font-size: 0.75rem; }
+  .stat-card__value { font-size: 1.25rem; }
+  .courses-toolbar .input { height: 35px; font-size: 0.78rem; }
+  .status-tab { font-size: 0.76rem; padding: 0.3rem 0.65rem; }
+  .course-grid { gap: 0.9rem; }
+  .course-card__head > .icon-btn { width: 28px; height: 28px; border: 0; background: transparent; }
+}
+
+@media (max-width: 600px) {
+  .courses-page .page-head h1 { font-size: 1.25rem; }
+  .courses-page .courses-toolbar .toolbar__filters { width: 100%; flex-basis: 100%; gap: 0.5rem; }
+  .courses-page .courses-toolbar .input { font-size: 16px; height: 38px; max-width: 100%; }
+  .courses-page .course-grid { gap: 0.7rem; }
+  .course-card { padding: 0.8rem 0.9rem; }
+  .course-card__meta { flex-wrap: wrap; }
+  .course-card__stats dt { flex-wrap: wrap; }
+  .courses-warning { align-items: flex-start; font-size: 0.76rem; }
+  .courses-warning svg { flex-shrink: 0; }
 }
 
 /* ============ Formadagi rang tanlash ============ */

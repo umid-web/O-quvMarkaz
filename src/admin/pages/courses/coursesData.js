@@ -81,6 +81,7 @@ export const createDemoCourses = () =>
   COURSES.map((c, i) => ({
     id: `C-${String(i + 1).padStart(4, '0')}`,
     name: c.name,
+    subject: c.name,
     fee: c.fee,
     status: 'active',
     createdAt: '2025-08-15',

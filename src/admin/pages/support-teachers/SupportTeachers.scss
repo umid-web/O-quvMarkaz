@@ -6,3 +6,18 @@
   background: var(--primary-soft);
   color: var(--primary);
 }
+
+.support-group-preview {
+  margin-top: 0.75rem;
+  padding: 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-2);
+
+  summary { cursor: pointer; color: var(--text); font-size: 0.78rem; font-weight: 500; }
+  dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 0.8rem; margin: 0.85rem 0 0; }
+  dl > div { min-width: 0; }
+  dt { color: var(--text-muted); font-size: 0.75rem; }
+  dd { margin: 0.2rem 0 0; color: var(--text); font-size: 0.82rem; overflow-wrap: anywhere; }
+  p { margin: 0.75rem 0 0; color: var(--text-muted); font-size: 0.8rem; overflow-wrap: anywhere; }
+}

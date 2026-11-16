@@ -1,4 +1,5 @@
-import { useState } from 'react'
+
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   AlertCircle,
@@ -11,14 +12,8 @@ import {
   UserRound,
 } from 'lucide-react'
 import './Login.scss'
-import { loadUsers } from '../admin/pages/users-roles/usersStore'
-import { loadTeachers } from '../admin/pages/teachers/teachersStore'
-import { verifyPassword } from './passwords'
+import { loginToBackend } from '../api/backend'
 
-const ADMIN_USERNAME = 'admin'
-const ADMIN_PASSWORD = 'admin'
-const RECEPTION_USERNAME = 'reception'
-const RECEPTION_PASSWORD = 'reception'
 
 function Login() {
   const navigate = useNavigate()
@@ -28,11 +23,13 @@ function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [currentYear] = useState(() => new Date().getFullYear())
+  const submitting = useRef(false)
 
   const handleSubmit = async (event) => {
     event.preventDefault()
 
-    if (loading) return
+    if (submitting.current) return
 
     setError('')
 
@@ -43,45 +40,19 @@ function Login() {
       return
     }
 
+    submitting.current = true
     setLoading(true)
-
-    // Kichik kechikish — "Tekshirilmoqda..." holatini ko‘rinadigan qilish uchun
-    window.setTimeout(async () => {
-      const isAdmin = trimmedUsername === ADMIN_USERNAME && password === ADMIN_PASSWORD
-      const isReception = trimmedUsername === RECEPTION_USERNAME && password === RECEPTION_PASSWORD
-
-      if (isAdmin || isReception) {
-        sessionStorage.setItem('educontrol_logged_in', 'true')
-        sessionStorage.setItem('educontrol_username', trimmedUsername)
-        sessionStorage.setItem('educontrol_role', isReception ? 'reception' : 'admin')
-
-        navigate(isReception ? '/reception' : '/admin/dashboard', { replace: true })
-        return
-      }
-
-      const users = loadUsers();
-      const account = users.find((user) => user.login?.toLowerCase() === trimmedUsername.toLowerCase() && user.status === 'active');
-      const linkedTeacher = account?.roleId === 'teacher' && loadTeachers().find((teacher) => teacher.status === 'active' && (
-        (account.teacherId && teacher.id === account.teacherId)
-        || (teacher.firstName.trim().toLocaleLowerCase('uz') === account.firstName.trim().toLocaleLowerCase('uz')
-          && teacher.lastName.trim().toLocaleLowerCase('uz') === account.lastName.trim().toLocaleLowerCase('uz'))
-      ));
-      if (account?.passwordHash && await verifyPassword(password, account.passwordHash)) {
-        const lastLoginAt = new Date().toLocaleString('sv-SE').slice(0, 16);
-        localStorage.setItem('edu-users-v1', JSON.stringify(users.map((user) => user.id === account.id ? { ...user, lastLoginAt } : user)));
-        sessionStorage.setItem('educontrol_logged_in', 'true');
-        sessionStorage.setItem('educontrol_username', account.login);
-        sessionStorage.setItem('educontrol_role', account.roleId);
-        sessionStorage.setItem('educontrol_user_id', account.id);
-        if (linkedTeacher) sessionStorage.setItem('educontrol_teacher_id', linkedTeacher.id);
-        const destination = account.roleId === 'reception' ? '/reception' : account.roleId === 'teacher' ? '/teacher' : '/admin';
-        navigate(destination, { replace: true });
-        return;
-      }
-
-      setError('Login yoki parol noto‘g‘ri.')
+    try {
+      const user = await loginToBackend(trimmedUsername, password)
+      setPassword('')
+      const destination = user.roleId === 'reception' ? '/reception' : user.roleId === 'teacher' ? '/teacher' : '/admin'
+      navigate(destination, { replace: true })
+    } catch (loginError) {
+      setError(loginError.message || 'Login yoki parol xato.')
       setLoading(false)
-    }, 450)
+    } finally {
+      submitting.current = false
+    }
   }
 
   const handleUsernameChange = (event) => {
@@ -122,7 +93,7 @@ function Login() {
           <p>Boshqaruv paneliga kirish uchun ma’lumotlaringizni kiriting.</p>
         </div>
 
-        <form className="login-form" onSubmit={handleSubmit} noValidate>
+        <form className="login-form" onSubmit={handleSubmit} noValidate aria-busy={loading}>
           <div className="login-field">
             <label htmlFor="username">Login</label>
 
@@ -140,6 +111,11 @@ function Login() {
                 placeholder="Loginingizni kiriting"
                 autoComplete="username"
                 spellCheck="false"
+                autoCapitalize="none"
+                maxLength={80}
+                required
+                aria-invalid={Boolean(error)}
+                aria-describedby={error ? 'login-error' : undefined}
                 value={username}
                 onChange={handleUsernameChange}
                 disabled={loading}
@@ -163,6 +139,10 @@ function Login() {
                 type={showPassword ? 'text' : 'password'}
                 placeholder="Parolni kiriting"
                 autoComplete="current-password"
+                maxLength={256}
+                required
+                aria-invalid={Boolean(error)}
+                aria-describedby={error ? 'login-error' : undefined}
                 value={password}
                 onChange={handlePasswordChange}
                 disabled={loading}
@@ -186,7 +166,7 @@ function Login() {
           </div>
 
           {error && (
-            <p className="login-message" role="alert">
+            <p id="login-error" className="login-message" role="alert">
               <AlertCircle size={16} aria-hidden="true" />
               <span>{error}</span>
             </p>
@@ -213,7 +193,7 @@ function Login() {
 
         <footer className="login-footer">
           <span className="login-footer__dot" aria-hidden="true" />
-          <p>Xavfsiz ulanish · EduControl Pro © {new Date().getFullYear()}</p>
+          <p>Xavfsiz ulanish · EduControl Pro © {currentYear}</p>
         </footer>
       </section>
     </main>

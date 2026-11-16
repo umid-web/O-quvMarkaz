@@ -27,8 +27,31 @@
 
   &__actions {
     display: flex;
+    flex-wrap: wrap;
     gap: $spacing-sm;
   }
+}
+
+@media (max-width: 600px) {
+  .page-head { gap: 0.85rem; align-items: stretch; }
+  .page-head h1 { font-size: 1.3rem; font-weight: 600; line-height: 1.3; }
+  .page-head p { font-size: 0.78rem; line-height: 1.6; }
+  .page-head__actions { width: 100%; gap: 0.4rem; }
+  .students-stats, .students-overview-stats { gap: 0.65rem; }
+  .toolbar { padding: 0.8rem; gap: 0.65rem; }
+  .toolbar__search { min-width: 0; }
+  .toolbar__filters { gap: 0.5rem; min-width: 0; }
+  .toolbar__filters .input { min-width: 0; max-width: 100%; }
+  .status-tab { padding: 0.35rem 0.65rem; font-size: 0.75rem; }
+  .bulk-bar { padding: 0.65rem 0.8rem; font-size: 0.78rem; }
+  .profile__hero { gap: 0.75rem; }
+  .profile__hero > div { min-width: 0; }
+  .profile__name { font-size: 1.1rem; overflow-wrap: anywhere; }
+  .profile__meta { flex-wrap: wrap; gap: 0.4rem; }
+  .profile__kpis { grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 0.5rem; }
+  .profile__kpi { padding: 0.65rem; }
+  .profile__kpi strong { overflow-wrap: anywhere; }
+  .billing__row { flex-wrap: wrap; gap: 0.25rem; }
 }
 
 .students-stats {
@@ -436,8 +459,8 @@
   }
 
   &__name {
-    font-size: 1.25rem;
-    font-weight: 700;
+    font-size: 1.1rem;
+    font-weight: 600;
     letter-spacing: -0.01em;
   }
 
@@ -527,7 +550,7 @@
   }
 
   &__row-label { font-size: 0.75rem; color: var(--text-muted); }
-  &__row-value { font-size: 0.9rem; font-weight: 500; }
+  &__row-value { font-size: 0.82rem; font-weight: 500; overflow-wrap: anywhere; }
 
   &__note {
     padding: 0.75rem 0.9rem;
@@ -622,4 +645,84 @@
 
     svg { flex-shrink: 0; margin-top: 2px; }
   }
+}
+
+// Students: compact controls and a quieter table hierarchy.
+.students-page {
+  gap: 1.1rem;
+
+  .page-head { align-items: center; gap: 0.75rem 1rem; }
+  .page-head h1 { font-size: 1.4rem; font-weight: 600; letter-spacing: -0.025em; }
+  .page-head p { margin-top: 0.3rem; font-size: 0.8rem; }
+  .page-head__actions { gap: 0.45rem; }
+  .page-head__actions .btn { height: 34px; font-size: 0.78rem; }
+  .students-stats { gap: 0.85rem; }
+  .stat-card { padding: 0.8rem 1rem; gap: 0.7rem; align-items: center; box-shadow: none; border-radius: 10px; }
+  .stat-card__icon { width: 34px; height: 34px; border-radius: 9px; }
+  .stat-card__icon svg { width: 18px; height: 18px; stroke-width: 1.7; }
+  .stat-card__title { font-size: 0.75rem; font-weight: 400; }
+  .stat-card__value { font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+  .stat-card__unit { font-size: 0.7rem; font-weight: 500; }
+  .students-card { box-shadow: none; border-radius: 11px; }
+  .toolbar { gap: 0.75rem; padding: 0.85rem 1rem; }
+  .toolbar__filters { gap: 0.5rem; }
+  .toolbar__filters .input { height: 35px; font-size: 0.78rem; border-radius: 7px; min-width: 130px; }
+  .toolbar__search { min-width: 0; }
+  .toolbar__search-icon { width: 15px; height: 15px; }
+  .status-tabs { gap: 0.2rem; }
+  .status-tab { padding: 0.3rem 0.65rem; font-size: 0.76rem; gap: 0.35rem; font-weight: 500; }
+  .status-tab__count { padding: 0 0.35rem; font-size: 0.65rem; }
+  .data-table { font-size: 0.8rem; }
+  .data-table th { padding-block: 0.65rem; font-size: 0.64rem; letter-spacing: 0.035em; font-weight: 500; }
+  .data-table td { padding-block: 0.6rem; }
+  .data-table__check { width: 30px; padding-left: 1rem; }
+  .data-table__actions { width: 30px; padding-right: 0.7rem; }
+  .student-cell { gap: 0.6rem; }
+  .student-cell__name { font-size: 0.8rem; font-weight: 500; }
+  .student-cell__id { margin-top: 2px; font-size: 0.65rem; }
+  .student-cell .avatar { width: 30px !important; height: 30px !important; font-size: 11px !important; }
+  .student-group-row td { padding: 0.5rem 0.8rem; }
+  .student-group-row strong { font-size: 0.75rem; font-weight: 600; }
+  .student-group-row span { font-size: 0.7rem; }
+  .two-line span:last-child { font-size: 0.7rem; }
+  .badge { font-size: 0.65rem; font-weight: 500; padding: 0.15rem 0.45rem; }
+  .debt { font-weight: 500; }
+  .data-table .icon-btn { width: 29px; height: 29px; border-color: transparent; background: transparent; }
+  .student-payment-open { width: 26px; height: 26px; border-color: var(--border); margin-top: 0.3rem; }
+  .bulk-bar { font-size: 0.78rem; padding: 0.55rem 1rem; }
+  .empty-state { padding: 2.5rem 1rem; }
+  .empty-state__icon { width: 44px; height: 44px; border-radius: 12px; }
+  .empty-state h3 { font-size: 0.95rem; }
+  .empty-state p { font-size: 0.8rem; }
+}
+
+.student-form {
+  gap: 1.1rem;
+  .field__label { font-size: 0.76rem; }
+  .input { height: 37px; font-size: 0.82rem; }
+  textarea.input { height: auto; min-height: 76px; }
+  .student-form__section { gap: 0.8rem; }
+  .student-form__section legend { font-size: 0.68rem; letter-spacing: 0.04em; }
+  .billing { padding: 0.75rem 0.85rem; }
+  .billing__head { font-size: 0.68rem; }
+  .billing__row { font-size: 0.78rem; }
+}
+
+@media (max-width: 600px) {
+  .students-page {
+    gap: 1rem;
+    .page-head { align-items: stretch; }
+    .page-head h1 { font-size: 1.25rem; }
+    .page-head p { font-size: 0.75rem; line-height: 1.6; }
+    .students-stats { gap: 0.6rem; }
+    .toolbar { padding: 0.7rem; gap: 0.65rem; }
+    .toolbar__filters .input { min-width: 0; font-size: 16px; height: 38px; }
+    .toolbar__search { flex-basis: 100%; }
+    .status-tab { flex-shrink: 0; }
+    .table-wrap { max-height: 65dvh; }
+    .data-table { min-width: 520px; }
+    .bulk-bar { padding: 0.6rem 0.7rem; }
+  }
+  .student-form .input { height: 40px; font-size: 16px; }
+  .student-form textarea.input { height: auto; }
 }

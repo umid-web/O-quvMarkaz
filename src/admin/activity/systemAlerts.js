@@ -1,8 +1,10 @@
+import { memoryCache, sessionIdentity } from '../../api/memoryStore.js';
 import { createDemoStudents } from '../pages/students/studentsData';
 import { loadSettings } from '../pages/settings/settingsStore';
 import { formatMoney } from '../utils/format';
 import { pushNotification } from './notificationStore';
 import { toDayKey } from './time';
+import { hasBackendSession, canWriteBackendCollection } from '../../api/backend';
 
 // Tizim o‘zi hosil qiladigan eslatmalar (qarzdorlik, tug‘ilgan kun, past davomat).
 // Har biri `key` bilan — bir kunda (yoki oyda) faqat bir marta yaratiladi.
@@ -13,12 +15,12 @@ const LOW_ATTENDANCE = 70;
 
 const loadStudents = () => {
   try {
-    const parsed = JSON.parse(localStorage.getItem(STUDENTS_KEY));
+    const parsed = JSON.parse(memoryCache.getItem(STUDENTS_KEY));
     if (Array.isArray(parsed)) return parsed;
   } catch {
     /* buzilgan yoki mavjud bo‘lmagan ma'lumot */
   }
-  return createDemoStudents();
+  return hasBackendSession() ? [] : createDemoStudents();
 };
 
 const fullName = (s) => `${s.lastName} ${s.firstName}`;
@@ -29,6 +31,9 @@ const namesLine = (list, max = 3) => {
 };
 
 export const syncSystemAlerts = () => {
+  if (!canWriteBackendCollection('edu-notifications-v1')) return;
+  // Aggregate reminders must be generated from the full student list.
+  if (hasBackendSession() && !['owner', 'admin'].includes(sessionIdentity.getItem('educontrol_role'))) return;
   const prefs = loadSettings().notifications;
   const students = loadStudents();
   const day = toDayKey(Date.now());

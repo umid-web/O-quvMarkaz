@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useCollectionState } from '../../../api/memoryStore.js';
 import Modal from '../../components/ui/Modal';
 import { useToast } from '../../components/ui/useToast';
 import TeacherPicker from './TeacherPicker';
@@ -60,6 +61,7 @@ const buildInitial = ({ group, team, courseNames, groups }) => {
  */
 const FormBody = ({ group, team, groups, courseNames, teachers, supportTeachers, studentCount, onClose, onSubmit }) => {
   const toast = useToast();
+  const [registeredRooms] = useCollectionState('edu-schedule-rooms-v1');
   const isEdit = Boolean(group);
   const [form, setForm] = useState(() => buildInitial({ group, team, courseNames, groups }));
   const [codeTouched, setCodeTouched] = useState(false);
@@ -110,7 +112,7 @@ const FormBody = ({ group, team, groups, courseNames, teachers, supportTeachers,
     if (!form.course) e.course = 'Kursni tanlang';
     if (form.days.length === 0) e.days = 'Kamida bitta dars kunini tanlang';
     if (!isValidRange(form.start, form.end)) e.time = 'Tugash vaqti boshlanish vaqtidan keyin bo‘lsin';
-    if (!form.room.trim()) e.room = 'Xonani kiriting';
+    if (!form.room.trim() || !rooms.includes(form.room)) e.room = 'Qo‘shilgan xonalardan tanlang';
     const capacity = Number(form.capacity);
     if (!Number.isInteger(capacity) || capacity < 1 || capacity > 100) e.capacity = 'Sig‘im 1 dan 100 gacha butun son bo‘lsin';
     if (!form.startDate) e.startDate = 'Boshlanish sanasini kiriting';
@@ -163,7 +165,7 @@ const FormBody = ({ group, team, groups, courseNames, teachers, supportTeachers,
     });
   };
 
-  const rooms = [...new Set(groups.map((g) => g.room))];
+  const rooms = [...new Set([...registeredRooms, ...groups.map((g) => g.room)].filter(Boolean))].sort((a, b) => a.localeCompare(b, 'uz', { numeric: true }));
   const courseLocked = isEdit && studentCount.total > 0;
 
   return (
@@ -238,9 +240,11 @@ const FormBody = ({ group, team, groups, courseNames, teachers, supportTeachers,
           <Field label="Tugash vaqti" required>
             <input type="time" className="input" {...bind('end')} />
           </Field>
-          <Field label="Xona raqami" required error={errors.room} hint="Masalan: 1-xona. Avval kiritilgan xonalarni ro‘yxatdan tanlashingiz mumkin.">
-            <input className="input" list="group-rooms" {...bind('room')} placeholder="1-xona" autoComplete="off" />
-            <datalist id="group-rooms">{rooms.map((r) => <option key={r} value={r} />)}</datalist>
+          <Field label="Xona" required error={errors.room} hint={rooms.length ? 'Dars jadvaliga qo‘shilgan xonalardan tanlang.' : 'Avval Dars jadvali bo‘limida xona qo‘shing.'}>
+            <select className="input" {...bind('room')} disabled={!rooms.length}>
+              <option value="">Xonani tanlang</option>
+              {rooms.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
           </Field>
           <Field label="Sig‘im (talaba)" required error={errors.capacity}>
             <input type="number" min="1" max="100" className="input" {...bind('capacity')} />

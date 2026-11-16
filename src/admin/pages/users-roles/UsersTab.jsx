@@ -7,7 +7,6 @@ import {
   Download,
   Eye,
   KeyRound,
-  Mail,
   Pencil,
   Plus,
   Search,
@@ -28,6 +27,8 @@ import { formatDate, formatDateTime, formatNumber, formatPhone } from '../../uti
 import UserFormModal from './UserFormModal';
 import UserDrawer from './UserDrawer';
 import { USER_STATUSES, USER_STATUS_OPTIONS, activeOwnerCount, userName } from './usersData';
+import { accountOptionLabel } from './accountOptions';
+import useReceptionPermissions from '../../../Reception/useReceptionPermissions';
 
 const DEFAULT_FILTERS = { status: 'all', role: 'all' };
 
@@ -43,12 +44,13 @@ const matchesQuery = (u, q, roleName) => {
   if (!q) return true;
   const text = `${u.lastName} ${u.firstName} ${u.id} ${u.login || u.email?.split('@')[0] || ''} ${roleName}`.toLowerCase();
   const digits = q.replace(/\D/g, '');
-  return text.includes(q) || (digits.length >= 3 && u.phone.includes(digits));
+  return text.includes(q) || (digits.length >= 3 && String(u.phone || '').includes(digits));
 };
 
 // Bir nechta foydalanuvchining rolini birdaniga almashtirish oynasi
 const BulkRoleModal = ({ count, roles, onClose, onSubmit }) => {
-  const [roleId, setRoleId] = useState(roles[0]?.id ?? '');
+  const assignableRoles = roles.filter((role) => role.id !== 'owner');
+  const [roleId, setRoleId] = useState(assignableRoles[0]?.id ?? '');
   return (
     <Modal
       open
@@ -66,7 +68,7 @@ const BulkRoleModal = ({ count, roles, onClose, onSubmit }) => {
       <label className="field">
         <span className="field__label">Yangi rol</span>
         <select className="input" value={roleId} onChange={(e) => setRoleId(e.target.value)} data-autofocus>
-          {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+          {assignableRoles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
         </select>
         <span className="field__hint">{roles.find((r) => r.id === roleId)?.description}</span>
       </label>
@@ -77,6 +79,10 @@ const BulkRoleModal = ({ count, roles, onClose, onSubmit }) => {
 const UsersTab = ({ access }) => {
   const toast = useToast();
   const { users: list, roles, addUser, updateUser, removeUsers, restoreUsers, setUsersStatus, setUsersRole } = access;
+  const can = useReceptionPermissions();
+  const canCreate = can('users-roles', 'create');
+  const canEdit = can('users-roles', 'edit');
+  const canDelete = can('users-roles', 'delete');
 
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
@@ -176,10 +182,10 @@ const UsersTab = ({ access }) => {
   };
 
   // ---------- Amallar ----------
-  const handleSubmit = (data) => {
+  const handleSubmit = async (data) => {
     if (form.user) {
-      if (!guardOwners(list.map((u) => (u.id === form.user.id ? { ...u, ...data } : u)))) return;
-      updateUser(form.user.id, data);
+      if (!guardOwners(list.map((u) => (u.id === form.user.id ? { ...u, ...data } : u)))) throw new Error('Kamida bitta faol Super admin qolishi shart.');
+      await updateUser(form.user.id, data);
       toast.success(`${userName(data)} ma'lumotlari saqlandi`);
     } else {
       const created = addUser(data);
@@ -190,14 +196,16 @@ const UsersTab = ({ access }) => {
     setForm({ open: false, user: null });
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     const ids = toDelete.map((u) => u.id);
     const idSet = new Set(ids);
     if (!guardOwners(list.filter((u) => !idSet.has(u.id)))) {
       setToDelete(null);
       return;
     }
-    const removed = removeUsers(ids);
+    let removed;
+    try { removed = await removeUsers(ids); }
+    catch (error) { toast.error(error.message); return; }
     setToDelete(null);
     setViewId(null);
     setSelected((prev) => {
@@ -206,30 +214,38 @@ const UsersTab = ({ access }) => {
       return next;
     });
     toast.info(removed.length === 1 ? 'Foydalanuvchi o‘chirildi' : `${removed.length} ta foydalanuvchi o‘chirildi`, {
-      action: { label: 'Qaytarish', onClick: () => restoreUsers(removed) },
+      action: { label: 'Qaytarish', onClick: () => restoreUsers(removed).catch((error) => toast.error(error.message)) },
     });
   };
 
-  const changeStatus = (ids, status) => {
+  const changeStatus = async (ids, status) => {
     const set = new Set(ids);
     const affected = list.filter((u) => set.has(u.id));
     if (!guardOwners(list.map((u) => (set.has(u.id) ? { ...u, status } : u)))) return;
     const before = affected.map((u) => ({ id: u.id, status: u.status }));
-    setUsersStatus(ids, status);
+    try { await setUsersStatus(ids, status); }
+    catch (error) { toast.error(error.message); return; }
     const label = USER_STATUSES[status].label.toLowerCase();
     toast.info(ids.length === 1 ? `${userName(affected[0])}: ${label}` : `${ids.length} ta foydalanuvchi: ${label}`, {
-      action: { label: 'Qaytarish', onClick: () => before.forEach(({ id, status: prev }) => updateUser(id, { status: prev })) },
+      action: { label: 'Qaytarish', onClick: async () => {
+        try { for (const { id, status: prev } of before) await updateUser(id, { status: prev }); }
+        catch (error) { toast.error(error.message); }
+      } },
     });
   };
 
-  const changeRole = (ids, roleId) => {
+  const changeRole = async (ids, roleId) => {
     const set = new Set(ids);
     if (!guardOwners(list.map((u) => (set.has(u.id) ? { ...u, roleId } : u)))) return;
-    const before = list.filter((u) => set.has(u.id)).map((u) => ({ id: u.id, roleId: u.roleId }));
-    setUsersRole(ids, roleId);
+    const before = list.filter((u) => set.has(u.id)).map((u) => ({ id: u.id, roleId: u.roleId, teacherId: u.teacherId || '', teacherType: u.teacherType || 'main' }));
+    try { await setUsersRole(ids, roleId); }
+    catch (error) { toast.error(error.message); return; }
     setBulkRole(false);
     toast.info(`${ids.length} ta foydalanuvchi roli o‘zgartirildi: ${roleName(roleId)}`, {
-      action: { label: 'Qaytarish', onClick: () => before.forEach(({ id, roleId: prev }) => updateUser(id, { roleId: prev })) },
+      action: { label: 'Qaytarish', onClick: async () => {
+        try { for (const { id, ...previous } of before) await updateUser(id, previous); }
+        catch (error) { toast.error(error.message); }
+      } },
     });
   };
 
@@ -241,7 +257,7 @@ const UsersTab = ({ access }) => {
     const source = selected.size ? list.filter((u) => selected.has(u.id)) : filtered;
     const header = ['ID', 'Familiya', 'Ism', 'Login', 'Telefon', 'Rol', 'Holati', 'Oxirgi kirish', 'Qo‘shilgan sana', 'Izoh'];
     const body = source.map((u) => [
-      u.id, u.lastName, u.firstName, u.login || u.email?.split('@')[0] || '', formatPhone(u.phone), roleName(u.roleId), USER_STATUSES[u.status].label,
+      u.id, u.lastName, u.firstName, u.login || u.email?.split('@')[0] || '', formatPhone(u.phone), accountOptionLabel(u, roles), USER_STATUSES[u.status].label,
       u.lastLoginAt ? formatDateTime(u.lastLoginAt) : '', formatDate(u.createdAt), u.note,
     ]);
     downloadCsv('foydalanuvchilar.csv', [header, ...body]);
@@ -250,19 +266,19 @@ const UsersTab = ({ access }) => {
 
   const menuItems = (u) => [
     { label: 'Profilni ko‘rish', icon: Eye, onClick: () => setViewId(u.id) },
-    { label: 'Tahrirlash', icon: Pencil, onClick: () => setForm({ open: true, user: u }) },
+    { label: 'Tahrirlash', icon: Pencil, hidden: !canEdit, onClick: () => setForm({ open: true, user: u }) },
     {
       label: 'Login yoki parolni o‘zgartirish',
       icon: KeyRound,
-      hidden: u.status === 'blocked',
+      hidden: !canEdit || u.status === 'blocked',
       onClick: () => resetPassword(u),
     },
-    { label: 'Faollashtirish', icon: UserCheck, hidden: u.status === 'active', onClick: () => changeStatus([u.id], 'active') },
-    { label: 'Bloklash', icon: Ban, hidden: u.status === 'blocked', onClick: () => changeStatus([u.id], 'blocked') },
-    { label: 'O‘chirish', icon: Trash2, tone: 'danger', divider: true, onClick: () => setToDelete([u]) },
+    { label: 'Faollashtirish', icon: UserCheck, hidden: !canEdit || u.status === 'active', onClick: () => changeStatus([u.id], 'active') },
+    { label: 'Bloklash', icon: Ban, hidden: !canEdit || u.status === 'blocked', onClick: () => changeStatus([u.id], 'blocked') },
+    { label: 'O‘chirish', icon: Trash2, hidden: !canDelete, tone: 'danger', divider: true, onClick: () => setToDelete([u]) },
   ];
 
-  const openCreate = () => setForm({ open: true, user: null });
+  const openCreate = () => { if (canCreate) setForm({ open: true, user: null }); };
 
   return (
     <>
@@ -270,7 +286,7 @@ const UsersTab = ({ access }) => {
         <button type="button" className="btn btn--secondary" onClick={exportCsv} disabled={filtered.length === 0}>
           <Download size={16} /> Eksport
         </button>
-        <button type="button" className="btn btn--primary" onClick={openCreate}>
+        <button type="button" className="btn btn--primary" onClick={openCreate} disabled={!canCreate}>
           <Plus size={16} /> Yangi foydalanuvchi
         </button>
       </div>
@@ -321,19 +337,19 @@ const UsersTab = ({ access }) => {
           <div className="bulk-bar" role="status">
             <span><strong>{selected.size}</strong> ta foydalanuvchi tanlandi</span>
             <div className="bulk-bar__actions">
-              <button type="button" className="btn btn--secondary btn--sm" onClick={() => changeStatus([...selected], 'active')}>
+              <button type="button" className="btn btn--secondary btn--sm" disabled={!canEdit} onClick={() => changeStatus([...selected], 'active')}>
                 <UserCheck size={14} /> Faollashtirish
               </button>
-              <button type="button" className="btn btn--secondary btn--sm" onClick={() => changeStatus([...selected], 'blocked')}>
+              <button type="button" className="btn btn--secondary btn--sm" disabled={!canEdit} onClick={() => changeStatus([...selected], 'blocked')}>
                 <Ban size={14} /> Bloklash
               </button>
-              <button type="button" className="btn btn--secondary btn--sm" onClick={() => setBulkRole(true)}>
+              <button type="button" className="btn btn--secondary btn--sm" disabled={!canEdit} onClick={() => setBulkRole(true)}>
                 <ShieldCheck size={14} /> Rolni o‘zgartirish
               </button>
               <button type="button" className="btn btn--secondary btn--sm" onClick={exportCsv}>
                 <Download size={14} /> Eksport
               </button>
-              <button type="button" className="btn btn--danger btn--sm" onClick={() => setToDelete(list.filter((u) => selected.has(u.id)))}>
+              <button type="button" className="btn btn--danger btn--sm" disabled={!canDelete} onClick={() => setToDelete(list.filter((u) => selected.has(u.id)))}>
                 <Trash2 size={14} /> O‘chirish
               </button>
               <button type="button" className="btn btn--ghost btn--sm" onClick={() => setSelected(new Set())}>
@@ -414,7 +430,7 @@ const UsersTab = ({ access }) => {
                       </td>
                       <td className="col-lg data-table__muted">{u.login || u.email?.split('@')[0] || '—'}</td>
                       <td>
-                        {role ? <span className={`badge badge--${role.tone}`}>{role.name}</span> : <span className="badge badge--muted">Noma‘lum</span>}
+                        {role ? <span className={`badge badge--${role.tone}`}>{accountOptionLabel(u, roles)}</span> : <span className="badge badge--muted">Noma‘lum</span>}
                       </td>
                       <td><span className={`badge badge--dot badge--${status.tone}`}>{status.label}</span></td>
                       <td className="col-xl data-table__muted">{u.lastLoginAt ? formatDateTime(u.lastLoginAt) : '—'}</td>
@@ -442,6 +458,8 @@ const UsersTab = ({ access }) => {
       />
 
       <UserDrawer
+        canEdit={canEdit}
+        canDelete={canDelete}
         user={viewUser}
         role={viewUser ? roleById.get(viewUser.roleId) : null}
         onClose={() => setViewId(null)}

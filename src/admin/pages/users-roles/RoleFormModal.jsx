@@ -26,35 +26,41 @@ const FormBody = ({ role, roles, onClose, onSubmit }) => {
     copyFrom: '',
   });
   const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
 
   const set = (name, value) => {
     setForm((f) => ({ ...f, [name]: value }));
     if (errors[name]) setErrors((e) => ({ ...e, [name]: undefined }));
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
+    if (saving) return;
     const name = form.name.trim();
     const e = {};
     if (name.length < 2) e.name = 'Nom kamida 2 ta belgidan iborat bo‘lsin';
-    else if (name.length > 30) e.name = 'Nom 30 ta belgidan oshmasin';
+    else if (name.length > 80) e.name = 'Nom 80 ta belgidan oshmasin';
     else if (roles.some((r) => r.id !== role?.id && r.name.toLowerCase() === name.toLowerCase())) e.name = 'Bunday nomli rol allaqachon mavjud';
     setErrors(e);
     if (Object.keys(e).length) return;
-    onSubmit({ name, description: form.description.trim(), tone: form.tone, copyFrom: form.copyFrom });
+    setSaving(true);
+    setFormError('');
+    try { await onSubmit({ name, description: form.description.trim(), tone: form.tone, copyFrom: form.copyFrom }); }
+    catch (error) { setFormError(error.message); setSaving(false); }
   };
 
   return (
     <Modal
       open
       size="md"
-      onClose={onClose}
+      onClose={saving ? undefined : onClose}
       title={isEdit ? 'Rolni tahrirlash' : 'Yangi rol'}
       subtitle={isEdit ? role.name : 'Ruxsatlarni keyingi qadamda belgilaysiz'}
       footer={
         <>
-          <button type="button" className="btn btn--secondary" onClick={onClose}>Bekor qilish</button>
-          <button type="submit" form="role-form" className="btn btn--primary">{isEdit ? 'Saqlash' : 'Rolni yaratish'}</button>
+          <button type="button" className="btn btn--secondary" onClick={onClose} disabled={saving}>Bekor qilish</button>
+          <button type="submit" form="role-form" className="btn btn--primary" disabled={saving}>{saving ? 'Saqlanmoqda…' : isEdit ? 'Saqlash' : 'Rolni yaratish'}</button>
         </>
       }
     >
@@ -93,11 +99,12 @@ const FormBody = ({ role, roles, onClose, onSubmit }) => {
         {!isEdit && (
           <Field label="Ruxsatlarni nusxalash" hint="Tanlangan rolning ruxsatlari yangi rolga ko‘chiriladi">
             <select className="input" value={form.copyFrom} onChange={(e) => set('copyFrom', e.target.value)}>
-              <option value="">Bo‘sh rol (ruxsatsiz)</option>
+              <option value="">Bosh sahifa va xodimlar chati</option>
               {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
           </Field>
         )}
+        {formError && <p role="alert" className="field__error">{formError}</p>}
       </form>
     </Modal>
   );

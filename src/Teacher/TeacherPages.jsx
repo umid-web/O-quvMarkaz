@@ -1,3 +1,4 @@
+import { sessionIdentity } from '../api/memoryStore.js';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Banknote, CalendarDays, CheckCircle2, Clock3, CreditCard, GraduationCap, MapPin, Search, Users } from 'lucide-react';
@@ -5,33 +6,40 @@ import Card from '../admin/components/Card';
 import StatCard from '../admin/components/StatCard';
 import Avatar from '../admin/components/ui/Avatar';
 import { findTeacherByGroup, loadTeachers } from '../admin/pages/teachers/teachersStore';
-import { loadUsers } from '../admin/pages/users-roles/usersStore';
+import { loadSupportTeachers } from '../admin/pages/support-teachers/supportStore';
+import { useEffect } from 'react';
+import { apiRequest, getSessionGeneration, hasBackendSession } from '../api/backend';
+import { entryMatchesEmployee } from '../admin/pages/finance/payroll';
+import { getSupportStats } from '../admin/pages/support-teachers/supportData';
+import { loadRoles, loadUsers } from '../admin/pages/users-roles/usersStore';
 import { loadGroups } from '../admin/pages/groups/groupsStore';
 import { useStudents } from '../admin/pages/students/useStudents';
 import { getTeacherStats, teacherName } from '../admin/pages/teachers/teachersData';
-import { weekdayShort } from '../admin/pages/students/studentsData';
+import { useCurrentTime } from '../admin/useCurrentTime';
 import { getPaymentStatus, PAYMENT_STATUSES } from '../admin/pages/students/studentsData';
 import { isoDate, usePayments } from '../admin/pages/finance/financeStore';
 import { formatSom } from '../admin/utils/format';
 import { calcSalary, KINDS, SALARY_STATUSES, useSalary } from '../admin/pages/finance/salaryStore';
 import './TeacherPages.scss';
 
-const teacherId = () => sessionStorage.getItem('educontrol_teacher_id');
+const teacherId = () => sessionIdentity.getItem('educontrol_teacher_id');
 const DAY_NAMES = { 1: 'Dushanba', 2: 'Seshanba', 3: 'Chorshanba', 4: 'Payshanba', 5: 'Juma', 6: 'Shanba', 0: 'Yakshanba' };
-const dateLabel = new Intl.DateTimeFormat('uz-UZ', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
 const courseTone = (name = '') => ['blue', 'mint', 'amber', 'violet', 'rose'][[...name].reduce((sum, char) => sum + char.charCodeAt(0), 0) % 5];
 
 function TeacherPages({ view }) {
+  const timestamp = useCurrentTime();
+  const dateLabel = new Intl.DateTimeFormat('uz-UZ', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(timestamp));
   const teacher = useMemo(() => {
-    const teachers = loadTeachers();
+    const type = sessionIdentity.getItem('educontrol_teacher_type') || 'main';
+    const teachers = type === 'support' ? loadSupportTeachers() : loadTeachers();
     const linked = teachers.find((item) => item.id === teacherId());
     if (linked) return linked;
-    const account = loadUsers().find((item) => item.id === sessionStorage.getItem('educontrol_user_id'));
+    const account = loadUsers().find((item) => item.id === sessionIdentity.getItem('educontrol_user_id'));
     if (!account) return null;
     return teachers.find((item) => item.status === 'active'
       && item.firstName.trim().toLocaleLowerCase('uz') === account.firstName.trim().toLocaleLowerCase('uz')
       && item.lastName.trim().toLocaleLowerCase('uz') === account.lastName.trim().toLocaleLowerCase('uz'))
-      || { id: account.id, firstName: account.firstName, lastName: account.lastName, subjects: [], groups: [], salary: 0 };
+      || { id: account.id, firstName: account.firstName, lastName: account.lastName, subjects: [], groups: [], salaryType: 'fixed', salaryValue: account.monthlySalary || 0, salary: 0 };
   }, []);
   const allTeachers = useMemo(() => loadTeachers(), []);
   const groups = useMemo(() => loadGroups().filter((group) => group.status === 'active' && teacher?.groups.includes(group.code)), [teacher]);
@@ -39,11 +47,33 @@ function TeacherPages({ view }) {
   const { students } = useStudents();
   const { payments } = usePayments(students);
   const { entries: salaryEntries } = useSalary();
+  const sessionGeneration = getSessionGeneration();
+  const backendSession = hasBackendSession();
+  const roleId = sessionIdentity.getItem('educontrol_role');
+  const canViewSalary = !backendSession || roleId === 'owner' || loadRoles().find((role) => role.id === roleId)?.permissions?.includes('salaries.view');
+  const needsPayroll = canViewSalary && (view === 'salaries' || !['payments', 'students', 'schedule'].includes(view));
+  const [payroll, setPayroll] = useState(() => ({ generation: sessionGeneration, attempt: 0, view, status: backendSession ? 'loading' : 'ready', employee: null, error: '' }));
+  const [payrollAttempt, setPayrollAttempt] = useState(0);
+  const payrollStatus = payroll.generation === sessionGeneration && payroll.attempt === payrollAttempt && payroll.view === view ? payroll.status : 'loading';
+  useEffect(() => {
+    if (!needsPayroll || !backendSession) return undefined;
+    let active = true;
+    const controller = new AbortController();
+    const current = () => active && !controller.signal.aborted && sessionGeneration === getSessionGeneration();
+    apiRequest('/payroll', { signal: controller.signal }).then(({ employees }) => {
+      if (!current()) return;
+      if (!Array.isArray(employees)) throw new Error('Ish haqi ma’lumotlari noto‘g‘ri formatda olindi. Qayta urinib ko‘ring.');
+      setPayroll({ generation: sessionGeneration, attempt: payrollAttempt, view, status: 'ready', employee: employees[0] || null, error: '' });
+    }).catch((error) => {
+      if (current()) setPayroll({ generation: sessionGeneration, attempt: payrollAttempt, view, status: 'error', employee: null, error: error.message });
+    });
+    return () => { active = false; controller.abort(); };
+  }, [needsPayroll, backendSession, payrollAttempt, sessionGeneration, view]);
   const [query, setQuery] = useState('');
   const [groupFilter, setGroupFilter] = useState('all');
   const [salaryMonth, setSalaryMonth] = useState(() => isoDate(new Date()).slice(0, 7));
-  const today = new Date().getDay();
-  const weekStart = new Date();
+  const today = new Date(timestamp).getDay();
+  const weekStart = new Date(timestamp);
   weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
   weekStart.setHours(0, 0, 0, 0);
   const roster = students.filter((student) => groups.some((group) => group.code === student.group) && student.status === 'active');
@@ -55,12 +85,19 @@ function TeacherPages({ view }) {
     return date;
   });
   const scheduleTimes = [...new Set(weekLessons.map((lesson) => lesson.start))].sort();
-  const monthKey = isoDate(new Date()).slice(0, 7);
+  const monthKey = isoDate(new Date(timestamp)).slice(0, 7);
   const studentIds = new Set(roster.map((student) => student.id));
   const monthPayments = payments.filter((payment) => studentIds.has(payment.studentId) && (payment.period || payment.date?.slice(0, 7)) === monthKey);
   const paidThisMonth = monthPayments.reduce((total, payment) => total + Number(payment.amount || 0), 0);
-  const personalSalaryEntries = salaryEntries.filter((entry) => entry.teacherId === teacher?.id && entry.month === salaryMonth);
-  const personalSalary = teacher ? calcSalary(getTeacherStats(teacher, students).salary, personalSalaryEntries) : null;
+  const salaryEmployee = payrollStatus === 'ready' ? payroll.employee : null;
+  const personalSalaryEntries = salaryEntries.filter((entry) => entryMatchesEmployee(entry, salaryEmployee || { id: teacher?.id, employeeType: teacherId() ? sessionIdentity.getItem('educontrol_teacher_type') || 'main' : 'user' }) && entry.month === salaryMonth);
+  const personalSalary = teacher && (!backendSession || salaryEmployee)
+    ? calcSalary(backendSession ? salaryEmployee.base : (sessionIdentity.getItem('educontrol_teacher_type') === 'support' ? getSupportStats(teacher, students).pay : getTeacherStats(teacher, students).salary), personalSalaryEntries)
+    : null;
+  const payrollNotice = !canViewSalary ? <p className="field__error" role="alert">Ish haqini ko‘rish huquqi yo‘q.</p>
+    : payrollStatus === 'loading' ? <p className="page__loading" role="status">Ish haqi yuklanmoqda…</p>
+      : payrollStatus === 'error' ? <div><p className="field__error" role="alert">{payroll.error}</p><button type="button" className="btn btn--secondary" onClick={() => setPayrollAttempt((attempt) => attempt + 1)}>Qayta urinish</button></div>
+        : !personalSalary ? <div className="teacher-empty teacher-empty--compact"><strong>Ish haqi profili topilmadi</strong><p>Administrator ish haqi sozlamalari va hisobingizga bog‘langan xodim profilini tekshirishi kerak.</p></div> : null;
   const visibleStudents = roster.filter((student) => {
     const groupMatch = groupFilter === 'all' || student.group === groupFilter;
     const search = `${student.firstName} ${student.lastName} ${student.id} ${student.group}`.toLocaleLowerCase('uz');
@@ -83,9 +120,10 @@ function TeacherPages({ view }) {
     </div>
   );
 
+  if (view === 'salaries' && payrollNotice) return <div className="teacher-page"><header className="teacher-page__heading"><div><h1>Mening ish haqim</h1><p>Shaxsiy ish haqi ma’lumotlari</p></div></header><Card className="teacher-card" title="Oylik hisob-kitob">{payrollNotice}</Card></div>;
   if (view === 'salaries') return (
     <div className="teacher-page">
-      <header className="teacher-page__heading"><div><span className="teacher-eyebrow">SHAXSIY MA’LUMOT</span><h1>Mening ish haqim</h1><p>Faqat o‘zingizga tegishli oylik hisob-kitob va to‘lovlar tarixi</p></div><label className="teacher-page__date"><CalendarDays size={17}/><select className="teacher-salary-month" aria-label="Ish haqi oyi" value={salaryMonth} onChange={(event) => setSalaryMonth(event.target.value)}>{Array.from({ length: 12 }, (_, index) => { const date = new Date(); date.setDate(1); date.setMonth(date.getMonth() - index); const value = isoDate(date).slice(0, 7); return <option key={value} value={value}>{new Intl.DateTimeFormat('uz-UZ', { month: 'long', year: 'numeric' }).format(date)}</option>; })}</select></label></header>
+      <header className="teacher-page__heading"><div><span className="teacher-eyebrow">SHAXSIY MA’LUMOT</span><h1>Mening ish haqim</h1><p>Faqat o‘zingizga tegishli oylik hisob-kitob va to‘lovlar tarixi</p></div><label className="teacher-page__date"><CalendarDays size={17}/><select className="teacher-salary-month" aria-label="Ish haqi oyi" value={salaryMonth} onChange={(event) => setSalaryMonth(event.target.value)}>{Array.from({ length: 12 }, (_, index) => { const date = new Date(timestamp); date.setDate(1); date.setMonth(date.getMonth() - index); const value = isoDate(date).slice(0, 7); return <option key={value} value={value}>{new Intl.DateTimeFormat('uz-UZ', { month: 'long', year: 'numeric' }).format(date)}</option>; })}</select></label></header>
       <section className="teacher-stats teacher-stats--salary"><StatCard title="Hisoblangan jami" value={formatSom(personalSalary.due)} icon={Banknote} tone="primary"/><StatCard title="To‘langan" value={formatSom(personalSalary.paid)} icon={CreditCard} tone="success"/><StatCard title="Qolgan summa" value={formatSom(personalSalary.left)} icon={Banknote} tone="warning"/></section>
       <Card className="teacher-card" title="Oylik hisob-kitob" subtitle={`${teacherName(teacher)} · ${salaryMonth}`}>
         <div className="teacher-salary-progress"><div className="teacher-salary-progress__labels"><span>To‘lov bajarilishi</span><strong>{personalSalary.pct}%</strong></div><div className="teacher-salary-progress__track"><span style={{ width: `${personalSalary.pct}%` }}/></div><div className="teacher-salary-breakdown"><div><span>Asosiy oylik</span><strong>{formatSom(personalSalary.base)}</strong></div><div><span>Bonus</span><strong>{formatSom(personalSalary.bonus)}</strong></div><div><span>Ushlanma</span><strong>{formatSom(personalSalary.penalty)}</strong></div><div><span>Holat</span><strong><span className={`badge badge--${SALARY_STATUSES[personalSalary.status].tone}`}>{SALARY_STATUSES[personalSalary.status].label}</span></strong></div></div></div>
@@ -108,7 +146,7 @@ function TeacherPages({ view }) {
   );
 
   if (view === 'schedule') return (
-    <div className="teacher-page">
+    <div className="teacher-page teacher-schedule">
       <header className="teacher-page__heading"><div><span className="teacher-eyebrow">MARKAZ JADVALI</span><h1>Barcha dars jadvallari</h1><p>Markazdagi barcha faol guruhlar, dars vaqtlari, xonalar va ustozlar</p></div><div className="teacher-page__date"><CalendarDays size={17}/>{dateLabel}</div></header>
       <Card className="teacher-card teacher-calendar-card" title="Haftalik darslar" subtitle={`${weekLessons.length} ta dars · hafta kunlari va boshlanish vaqti bo‘yicha`}>
         {weekLessons.length ? <div className="teacher-calendar-scroll"><div className="teacher-calendar" style={{ '--calendar-columns': scheduleDays.length }}>
@@ -126,7 +164,7 @@ function TeacherPages({ view }) {
     <section className="teacher-dashboard__grid"><Card className="teacher-card teacher-today" title="Bugungi darslar" subtitle={DAY_NAMES[today]}>{todayLessons.length ? <div className="teacher-today__list">{todayLessons.map((group) => <article className="teacher-today__lesson" key={group.code}><span className="teacher-today__icon"><CalendarDays size={18}/></span><span className="teacher-today__details"><strong>{group.course}</strong><small>{group.code} · {group.room}</small></span><span className="teacher-today__time">{group.start}<small>{group.end} gacha</small></span></article>)}</div> : <div className="teacher-no-lessons"><CheckCircle2 size={21}/><div><strong>Bugun dars yo‘q</strong><span>Yaxshi dam oling, ustoz!</span></div></div>}<Link className="teacher-text-link" to="/teacher/schedule">To‘liq jadvalni ko‘rish <ArrowRight size={15}/></Link></Card>
       <Card className="teacher-card teacher-shortcuts" title="Tezkor amallar" subtitle="Kerakli bo‘limga tez o‘ting"><Link to="/teacher/students"><span className="teacher-shortcuts__icon is-green"><GraduationCap size={19}/></span><span><strong>O‘quvchilarim</strong><small>Guruhlar va o‘quvchilar ro‘yxati</small></span><ArrowRight size={17}/></Link><Link to="/teacher/schedule"><span className="teacher-shortcuts__icon is-orange"><CalendarDays size={19}/></span><span><strong>Dars jadvali</strong><small>Haftalik darslarni ko‘ring</small></span><ArrowRight size={17}/></Link><Link to="/teacher/payments"><span className="teacher-shortcuts__icon is-violet"><CreditCard size={19}/></span><span><strong>To‘lov holati</strong><small>Oylik to‘lovlarni ko‘ring</small></span><ArrowRight size={17}/></Link><Link to="/teacher/salaries"><span className="teacher-shortcuts__icon is-green"><Banknote size={19}/></span><span><strong>Ish haqi</strong><small>Oylik hisob va to‘lovlar</small></span><ArrowRight size={17}/></Link></Card>
     </section>
-    <Card className="teacher-salary-glance" title="Shu oydagi ish haqi" subtitle="Shaxsiy hisob-kitob"><div className="teacher-salary-glance__amounts"><div><small>Hisoblangan</small><strong>{formatSom(personalSalary.due)}</strong></div><div><small>To‘langan</small><strong>{formatSom(personalSalary.paid)}</strong></div><div><small>Qoldiq</small><strong>{formatSom(personalSalary.left)}</strong></div></div><div className="teacher-salary-glance__bar"><span style={{ width: `${personalSalary.pct}%` }}/></div><Link className="teacher-text-link" to="/teacher/salaries">Batafsil ma’lumot <ArrowRight size={15}/></Link></Card>
+    {canViewSalary && <Card className="teacher-salary-glance" title="Shu oydagi ish haqi" subtitle="Shaxsiy hisob-kitob">{payrollNotice || <><div className="teacher-salary-glance__amounts"><div><small>Hisoblangan</small><strong>{formatSom(personalSalary.due)}</strong></div><div><small>To‘langan</small><strong>{formatSom(personalSalary.paid)}</strong></div><div><small>Qoldiq</small><strong>{formatSom(personalSalary.left)}</strong></div></div><div className="teacher-salary-glance__bar"><span style={{ width: `${personalSalary.pct}%` }}/></div></>}<Link className="teacher-text-link" to="/teacher/salaries">Batafsil ma’lumot <ArrowRight size={15}/></Link></Card>}
   </div>;
 }
 

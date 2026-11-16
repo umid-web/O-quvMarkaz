@@ -1,0 +1,10 @@
+.payment-ledger {
+  padding: 16px; margin-block: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
+  h4 { margin: 0 0 14px; color: var(--text); }
+  &__summary { display: flex; flex-wrap: wrap; gap: 20px; span { display: grid; gap: 5px; color: var(--text-muted); font-size: 0.8rem; } strong { color: var(--text); font-size: 1rem; } }
+  &__note { color: var(--text-muted); font-size: 0.75rem; line-height: 1.6; }
+  &__scroll { overflow: auto; max-height: 360px; }
+  table { width: 100%; border-collapse: collapse; white-space: nowrap; font-size: 0.8rem; }
+  th, td { padding: 12px; text-align: left; border-bottom: 1px solid var(--border); color: var(--text); }
+  th { color: var(--text-muted); background: var(--surface-2); }
+}

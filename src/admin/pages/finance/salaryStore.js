@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
-import { createDemoStudents } from '../students/studentsData';
-import { createDemoTeachers, getTeacherStats } from '../teachers/teachersData';
-import { isoDate } from './financeStore';
+import { useCollectionState } from '../../../api/memoryStore.js';
+import { useCallback, useEffect } from 'react';
 
-// DEMO: localStorage. Backend ulanganda faqat shu fayl almashtiriladi.
+
+
+import { hasBackendSession, saveBackendCollection } from '../../../api/backend';
+import { useRef } from 'react';
+
+// DEMO: memoryCache. Backend ulanganda faqat shu fayl almashtiriladi.
 const KEY = 'edu-salary-v1';
 
 export const KINDS = {
@@ -29,30 +32,23 @@ export const calcSalary = (base, entries) => {
   return { base, bonus, penalty, due, paid, left, status, pct: due ? Math.min(100, Math.round((paid / due) * 100)) : 0 };
 };
 
-const seed = () => {
-  const students = createDemoStudents();
-  const now = new Date();
-  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const out = createDemoTeachers().filter((t) => t.status !== 'left').map((t, i) => ({
-    id: `SAL-S${i}`, teacherId: t.id, month: isoDate(prev).slice(0, 7), kind: 'pay', amount: getTeacherStats(t, students).salary,
-    method: i % 2 ? 'Karta' : 'Naqd', date: isoDate(new Date(prev.getFullYear(), prev.getMonth() + 1, 3)), note: '',
-  }));
-  return out;
-};
-
 export const useSalary = () => {
-  const [entries, setEntries] = useState(() => {
+  const saving = useRef(false);
+  const [entries, setEntries] = useCollectionState(KEY);
+  const latest = useRef(entries);
+  useEffect(() => { latest.current = entries; }, [entries]);
+  const save = useCallback(async (update) => {
+    if (saving.current) throw new Error('Ish haqi saqlanmoqda. Bir oz kuting.');
+    saving.current = true;
     try {
-      const p = JSON.parse(localStorage.getItem(KEY));
-      if (Array.isArray(p)) return p;
-    } catch { /* buzilgan ma'lumot */ }
-    return seed();
-  });
-  useEffect(() => {
-    try { localStorage.setItem(KEY, JSON.stringify(entries)); } catch { /* e'tiborsiz */ }
-  }, [entries]);
-  const add = useCallback((e) => setEntries((l) => [{ ...e, id: `SAL-${Date.now()}` }, ...l]), []);
-  const remove = useCallback((id) => setEntries((l) => l.filter((e) => e.id !== id)), []);
-  const restore = useCallback((e) => setEntries((l) => [e, ...l]), []);
+      const value = update(latest.current);
+      const saved = hasBackendSession() ? await saveBackendCollection(KEY, value) : value;
+      latest.current = saved;
+      setEntries(saved);
+    } finally { saving.current = false; }
+  }, [setEntries]);
+  const add = useCallback((e) => save((list) => [{ ...e, id: `SAL-${crypto.randomUUID()}` }, ...list]), [save]);
+  const remove = useCallback((id) => save((list) => list.filter((e) => e.id !== id)), [save]);
+  const restore = useCallback((e) => save((list) => [e, ...list.filter((item) => item.id !== e.id)]), [save]);
   return { entries, add, remove, restore };
 };

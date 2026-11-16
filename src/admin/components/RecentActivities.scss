@@ -19,9 +19,9 @@
     display: grid;
     place-items: center;
     flex-shrink: 0;
-    width: 34px;
-    height: 34px;
-    border-radius: 10px;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
 
     &--primary { background: var(--primary-soft); color: var(--primary); }
     &--success { background: var(--success-soft); color: var(--success); }
@@ -37,13 +37,13 @@
   }
 
   &__desc {
-    font-size: 0.9rem;
+    font-size: 0.8rem;
     font-weight: 500;
     color: var(--text);
   }
 
   &__time {
-    font-size: 0.78rem;
+    font-size: 0.7rem;
     color: var(--text-muted);
   }
 }

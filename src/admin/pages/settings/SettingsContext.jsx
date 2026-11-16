@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { SettingsContext } from './settingsContextValue';
 import { logActivity } from '../../activity/activityStore';
-import { cloneSettings, DEFAULT_SETTINGS, loadSettings, saveSettings } from './settingsStore';
+import { cloneSettings, DEFAULT_SETTINGS, hydrateSettings, loadSettings, saveSettings } from './settingsStore';
+import { useCollectionState } from '../../../api/memoryStore.js';
+import { getSessionGeneration, syncSettingsBackend } from '../../../api/backend.js';
 
 const SECTION_LABELS = {
   org: 'Tashkilot',
@@ -16,9 +18,8 @@ const KEY_LABELS = {
   name: 'Nomi', legalName: 'Yuridik nomi', phone: 'Telefon', email: 'Email', website: 'Veb-sayt', address: 'Manzil',
   inn: 'STIR', director: 'Direktor', timezone: 'Vaqt mintaqasi', workStart: 'Ish boshlanishi', workEnd: 'Ish tugashi',
   workDays: 'Ish kunlari', logo: 'Logotip', theme: 'Mavzu', density: 'Zichlik', language: 'Til', dateFormat: 'Sana formati',
-  currency: 'Valyuta', invoicePrefix: 'Hisob prefiksi', lateFeePercent: 'Penya (%)', dueDay: 'To‘lov kuni',
-  paymentMethods: 'To‘lov usullari', fiscalYearStart: 'Moliya yili boshlanishi', lateMinutes: 'Kechikish (daq.)',
-  autoAbsentMinutes: 'Avto-yo‘q (daq.)', requireNote: 'Izoh majburiy', notifyParents: 'Ota-onaga xabar',
+  currency: 'Valyuta', invoicePrefix: 'Hisob prefiksi', dueDay: 'To‘lov kuni',
+  paymentMethods: 'To‘lov usullari', fiscalYearStart: 'Moliya yili boshlanishi', notifyParents: 'Ota-onaga xabar',
   sms: 'SMS', telegram: 'Telegram', paymentReminders: 'To‘lov eslatmalari', attendanceAlerts: 'Davomat ogohlantirishlari',
   birthdayReminders: 'Tug‘ilgan kun eslatmalari', digest: 'Xulosa', sessionMinutes: 'Sessiya (daq.)',
   twoFactor: 'Ikki bosqichli himoya', passwordMinLength: 'Parol uzunligi', loginAlerts: 'Kirish ogohlantirishlari',
@@ -49,15 +50,32 @@ const applyChrome = (settings) => {
 };
 
 export const SettingsProvider = ({ children }) => {
-  const [settings, setSettings] = useState(loadSettings);
+
+  const [storedSettings] = useCollectionState('edu-settings-v1');
+  const settings = useMemo(() => hydrateSettings(storedSettings), [storedSettings]);
+  useEffect(() => {
+    let running = false;
+    const refresh = async () => {
+      if (running || document.hidden) return;
+      running = true;
+      try { await syncSettingsBackend(); } catch { /* Retry when connection recovers. */ }
+      finally { running = false; }
+    };
+    void refresh();
+    const timer = window.setInterval(refresh, 5000);
+    window.addEventListener('focus', refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); };
+  }, []);
 
   useEffect(() => {
     applyChrome(settings);
   }, [settings]);
 
-  const save = useCallback((next) => {
+  const save = useCallback(async (next) => {
+    const generation = getSessionGeneration();
     const previous = loadSettings();
-    const stored = saveSettings(next);
+    const stored = await saveSettings(next);
+    if (generation !== getSessionGeneration()) throw new Error('Sessiya o‘zgardi.');
     const changes = diffSettings(previous, stored);
     if (changes.length) {
       const securityChanged = changes.some((c) => c.field.startsWith('security.'));
@@ -72,15 +90,17 @@ export const SettingsProvider = ({ children }) => {
           : null,
       });
     }
-    setSettings(stored);
+
     applyChrome(stored);
     return stored;
   }, []);
 
-  const reset = useCallback(() => {
+  const reset = useCallback(async () => {
+    const generation = getSessionGeneration();
+    const stored = await saveSettings(cloneSettings(DEFAULT_SETTINGS));
+    if (generation !== getSessionGeneration()) throw new Error('Sessiya o‘zgardi.');
     logActivity({ module: 'settings', action: 'system', severity: 'warning', title: 'Sozlamalar standart holatga qaytarildi' });
-    const stored = saveSettings(cloneSettings(DEFAULT_SETTINGS));
-    setSettings(stored);
+
     applyChrome(stored);
     return stored;
   }, []);

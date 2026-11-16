@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { sessionIdentity } from '../api/memoryStore.js';
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, CalendarDays, Check, CheckCircle2, Clock3, CreditCard, Search, UserPlus, X } from 'lucide-react'
 import { useStudents } from '../admin/pages/students/useStudents'
@@ -12,7 +13,9 @@ import StudentStatsChart from '../admin/components/StudentStatsChart'
 import CourseDistributionChart from '../admin/components/CourseDistributionChart'
 import PaymentsStatusChart from '../admin/components/PaymentsStatusChart'
 import Alerts from '../admin/components/Alerts'
-import { getStudentStats, getCourseDistribution, getPaymentsStatus, getAlerts } from '../admin/data/dashboardDemoData'
+import { buildDashboardData } from '../admin/data/dashboardData'
+import { useTeachers } from '../admin/pages/teachers/teachersStore'
+import { useSupportTeachers } from '../admin/pages/support-teachers/supportStore'
 import './Reception.scss'
 
 const money = (value) => new Intl.NumberFormat('uz-UZ').format(value) + ' soʻm'
@@ -20,32 +23,40 @@ const money = (value) => new Intl.NumberFormat('uz-UZ').format(value) + ' soʻm'
 export default function Reception() {
   const { students, update } = useStudents()
   const { payments, add: addPayment } = usePayments(students)
+  const { teachers } = useTeachers()
+  const { supportTeachers } = useSupportTeachers()
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60_000)
+    return () => clearInterval(timer)
+  }, [])
   const [query, setQuery] = useState('')
   const [payTarget, setPayTarget] = useState('')
   const [payAmount, setPayAmount] = useState('')
   const [payMethod, setPayMethod] = useState(METHODS[0])
   const toast = useToast()
-  const role = loadRoles().find((item) => item.id === sessionStorage.getItem('educontrol_role'))
+  const role = loadRoles().find((item) => item.id === sessionIdentity.getItem('educontrol_role'))
   const canReceivePayment = role?.permissions?.includes('payments.create')
   const canOpen = (module) => role?.permissions?.includes(`${module}.view`)
-  const active = students.filter((student) => student.status === 'active')
+  const active = useMemo(() => students.filter((student) => student.status === 'active'), [students])
   const debtors = active.filter((student) => student.debt > 0)
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase('uz')
     if (!normalized) return active.slice(0, 6)
     return active.filter((student) => `${student.firstName} ${student.lastName} ${student.phone} ${student.group}`.toLocaleLowerCase('uz').includes(normalized)).slice(0, 8)
   }, [active, query])
-  const currentMonth = isoDate(new Date()).slice(0, 7)
-  const today = isoDate(new Date())
+  const currentMonth = isoDate(now).slice(0, 7)
+  const today = isoDate(now)
   const todayPayments = payments.filter((payment) => payment.date === today)
   const todayRevenue = todayPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
   const outstanding = debtors.reduce((sum, student) => sum + Number(student.debt || 0), 0)
-  const weekday = new Date().getDay()
-  const allGroups = loadGroups()
+  const weekday = now.getDay()
+  const allGroups = useMemo(() => loadGroups(), [])
   const scheduleToday = allGroups.filter((group) => group.status === 'active' && group.days?.includes(weekday)).sort((a, b) => a.start.localeCompare(b.start))
   const knownRooms = [...new Set(allGroups.map((group) => group.room).filter(Boolean))]
   const occupiedRooms = new Set(scheduleToday.map((group) => group.room))
   const freeRooms = knownRooms.filter((room) => !occupiedRooms.has(room))
+  const overview = buildDashboardData({ students, payments, teachers, supportTeachers, groups: allGroups, period: 'month', now })
   const monthPaid = (studentId) => payments
     .filter((payment) => payment.studentId === studentId && payment.date?.startsWith(currentMonth))
     .reduce((total, payment) => total + Number(payment.amount || 0), 0)
@@ -62,7 +73,7 @@ export default function Reception() {
       toast.error(`Summa 1 dan ${money(student.debt)} gacha bo‘lishi kerak.`)
       return
     }
-    const date = isoDate(new Date())
+    const date = isoDate(now)
     addPayment({ studentId: student.id, name: `${student.lastName} ${student.firstName}`, group: student.group, amount, method: payMethod, date, period: date.slice(0, 7) })
     update(student.id, { debt: Math.max(0, Number(student.debt) - amount) })
     toast.success(`${money(amount)} to‘lov qabul qilindi. Qoldiq: ${money(Math.max(0, student.debt - amount))}.`)
@@ -74,7 +85,7 @@ export default function Reception() {
     <main className="reception">
       <section className="reception__welcome">
         <div><span className="reception__eyebrow">QABULXONA PANELI</span><h1>Xayrli kun!</h1><p>Bugungi ishlar va talabalar bilan ishlash uchun boshqaruv oynasi.</p></div>
-        <div className="reception__clock"><Clock3 size={18}/><span><b>{new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })}</b><small>Ish kuni davom etmoqda</small></span></div>
+        <div className="reception__clock"><Clock3 size={18}/><span><b>{now.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })}</b><small>Ish kuni davom etmoqda</small></span></div>
       </section>
 
       <section className="reception__quick-actions" aria-label="Tezkor amallar">
@@ -88,10 +99,10 @@ export default function Reception() {
       </section>
 
       <section className="reception__dashboard-grid" aria-label="Boshqaruv ko‘rsatkichlari">
-        <Card title="To‘lovlar holati" subtitle="Talabalar ulushi, %" demo><PaymentsStatusChart data={getPaymentsStatus()} /></Card>
-        <Card title="Kurslar bo‘yicha taqsimot" subtitle="Talabalar soni" demo><CourseDistributionChart data={getCourseDistribution()} /></Card>
-        <Card title="O‘quvchilar statistikasi" subtitle="Haftalar kesimida" demo><StudentStatsChart data={getStudentStats()} /></Card>
-        <Card title="Ogohlantirishlar" demo><Alerts alerts={getAlerts()} /></Card>
+        <Card title="To‘lovlar holati" subtitle="Talabalar ulushi, %"><PaymentsStatusChart data={overview.paymentStatus} /></Card>
+        <Card title="Kurslar bo‘yicha taqsimot" subtitle="Talabalar soni"><CourseDistributionChart data={overview.courseDist} /></Card>
+        <Card title="O‘quvchilar statistikasi" subtitle="Haftalar kesimida"><StudentStatsChart data={overview.studentStats} /></Card>
+        <Card title="Ogohlantirishlar"><Alerts alerts={overview.alerts} /></Card>
       </section>
 
       <section className="reception__overview-grid">
@@ -134,3 +145,5 @@ export default function Reception() {
     </main>
   )
 }
+
+

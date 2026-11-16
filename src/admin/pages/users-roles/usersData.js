@@ -3,6 +3,7 @@
 // shuning uchun menyuga yangi sahifa qo‘shilsa, u ruxsatlar jadvalida avtomatik paydo bo‘ladi.
 
 import { navSections } from '../../navigation';
+import { DEFAULT_EMPLOYEE_PERMISSIONS } from '../../../auth/chatPermissions';
 
 /* ============ Amallar va bo‘limlar ============ */
 export const ACTIONS = [
@@ -31,12 +32,13 @@ const MODULE_ACTIONS = {
   payments: FULL,
   debts: ['view', 'export'],
   expenses: FULL,
-  salaries: ['view'],
+  salaries: ['view', 'create', 'edit', 'delete'],
   reports: ['view', 'export'],
-  notifications: ['view', 'create'],
+  notifications: ['view', 'create', 'edit', 'delete'],
   'users-roles': CRUD,
   settings: ['view', 'edit'],
-  activity: ['view', 'export'],
+  activity: ['view', 'create', 'export'],
+  chat: ['view', 'create', 'edit'],
 };
 
 export const PERMISSION_SECTIONS = navSections.map((section) => ({
@@ -127,8 +129,8 @@ const SYSTEM_ROLES = [
   },
   {
     id: 'admin', name: 'Administrator', tone: 'primary',
-    description: 'Barcha bo‘limlar bilan ishlaydi, lekin foydalanuvchi va rollarni faqat ko‘ra oladi',
-    permissions: () => grant(allModules({ 'users-roles': ['view'] })),
+    description: 'Barcha bo‘limlar bilan ishlaydi va yangi foydalanuvchi hisoblarini qo‘sha oladi',
+    permissions: () => grant(allModules({ 'users-roles': ['view', 'create'] })),
   },
   {
     id: 'manager', name: 'Menejer', tone: 'success',
@@ -136,7 +138,7 @@ const SYSTEM_ROLES = [
     permissions: () =>
       grant({
         dashboard: 'all', students: 'all', teachers: ['view'], 'support-teachers': ['view'], courses: ['view', 'edit'],
-        groups: 'all', schedule: 'all', attendance: 'all', reports: 'all', notifications: 'all',
+        groups: 'all', schedule: 'all', attendance: 'all', reports: 'all', notifications: 'all', activity: ['view', 'create'],
       }),
   },
   {
@@ -144,7 +146,7 @@ const SYSTEM_ROLES = [
     description: 'Moliya: to‘lovlar, qarzdorlik, xarajatlar va moliyaviy hisobotlar',
     permissions: () =>
       grant({
-        dashboard: 'all', students: ['view', 'export'], finance: 'all', payments: 'all', debts: 'all', expenses: 'all', reports: 'all',
+        dashboard: 'all', students: ['view', 'export'], finance: 'all', payments: 'all', debts: 'all', expenses: 'all', salaries: 'all', reports: 'all', activity: ['view', 'create'],
       }),
   },
   {
@@ -153,22 +155,25 @@ const SYSTEM_ROLES = [
     permissions: () =>
       grant({
         dashboard: 'all', students: ['view', 'create', 'edit'], groups: ['view'], courses: ['view'], schedule: ['view'], attendance: ['view', 'edit'],
-        payments: ['view', 'create', 'delete', 'export'], debts: ['view'],
+        payments: ['view', 'create', 'delete', 'export'], debts: ['view'], activity: ['view', 'create'],
       }),
   },
   {
     id: 'teacher', name: 'Ustoz', tone: 'muted',
     description: 'O‘z o‘quvchilari, jadvali, davomat, to‘lov holati va ish haqi',
     permissions: () =>
-      grant({ dashboard: ['view'], students: ['view'], schedule: ['view'], attendance: ['view'], payments: ['view'], salaries: ['view'] }),
+      grant({ dashboard: ['view'], students: ['view'], groups: ['view'], schedule: ['view'], attendance: ['view'], payments: ['view'], salaries: ['view'] }),
   },
 ];
 
 export const createDefaultRoles = () =>
-  SYSTEM_ROLES.map(({ permissions, ...role }) => ({ ...role, system: true, permissions: permissions() }));
+  SYSTEM_ROLES.map(({ permissions, ...role }) => ({ ...role, system: true, permissions: [...new Set([...permissions(), ...DEFAULT_EMPLOYEE_PERMISSIONS])] }));
 
 /** Tizim rolining boshlang‘ich ruxsatlari ("Asl holatga qaytarish" uchun). Maxsus rolda — null. */
-export const defaultPermissions = (roleId) => SYSTEM_ROLES.find((r) => r.id === roleId)?.permissions() ?? null;
+export const defaultPermissions = (roleId) => {
+  const role = SYSTEM_ROLES.find((item) => item.id === roleId);
+  return role ? [...new Set([...role.permissions(), ...DEFAULT_EMPLOYEE_PERMISSIONS])] : null;
+};
 
 /** Saqlangan rollarni tekshiradi: eskirgan ruxsatlar olib tashlanadi, Super admin doim to‘liq ruxsatli. */
 export const normalizeRoles = (roles) => {
@@ -180,7 +185,7 @@ export const normalizeRoles = (roles) => {
       tone: r.tone ?? 'primary',
       system: Boolean(r.system),
       locked: r.id === 'owner',
-      permissions: r.id === 'owner' ? ALL_PERMISSIONS : (Array.isArray(r.permissions) ? r.permissions : []).filter((p) => VALID_PERMISSIONS.has(p)),
+      permissions: r.id === 'owner' ? ALL_PERMISSIONS : [...new Set((Array.isArray(r.permissions) ? r.permissions : []).filter((p) => VALID_PERMISSIONS.has(p)))],
     }));
   return cleaned.some((r) => r.id === 'owner') ? cleaned : [...createDefaultRoles().filter((r) => r.id === 'owner'), ...cleaned];
 };
@@ -203,7 +208,6 @@ export const summarizePermissions = (role) => {
 /* ============ Foydalanuvchilar ============ */
 export const USER_STATUSES = {
   active: { label: 'Faol', tone: 'success' },
-  invited: { label: 'Taklif yuborilgan', tone: 'warning' },
   blocked: { label: 'Bloklangan', tone: 'danger' },
 };
 export const USER_STATUS_OPTIONS = Object.entries(USER_STATUSES).map(([value, { label }]) => ({ value, label }));

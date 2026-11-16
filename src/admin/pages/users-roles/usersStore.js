@@ -1,19 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCollectionState, memoryCache, sessionIdentity, readCollectionSnapshot } from '../../../api/memoryStore.js';
+import { useCallback, useRef } from 'react';
 import { createLogger, diffObjects, logActivity } from '../../activity/activityStore';
 import { pushNotification } from '../../activity/notificationStore';
-import { createDemoUsers, createDefaultRoles, defaultPermissions, normalizeRoles, USER_STATUSES, userName } from './usersData';
+import { createDefaultRoles, defaultPermissions, normalizeRoles, USER_STATUSES, userName } from './usersData';
+import { hasBackendSession, saveBackendUsers, saveBackendCollection } from '../../../api/backend';
 
-// DEMO: ma'lumotlar brauzerda (localStorage) saqlanadi. Backend ulanganda faqat shu fayldagi
-// funksiyalar API so‘rovlari (axios) bilan almashtiriladi — sahifalar kodi o‘zgarmaydi.
-// Parollar saqlanmaydi: yangi foydalanuvchiga taklif yuboriladi, parolni u o‘zi o‘rnatadi.
+// Server-backed data is held only in the tab-local React store.
 const USERS_KEY = 'edu-users-v1';
 const ROLES_KEY = 'edu-roles-v1';
-const RECEPTION_ACCESS_MIGRATION = 'edu-reception-access-v3';
-const TEACHER_READONLY_MIGRATION = 'edu-teacher-readonly-access-v2';
 
 const read = (key) => {
   try {
-    const parsed = JSON.parse(localStorage.getItem(key));
+    const parsed = JSON.parse(memoryCache.getItem(key));
     if (Array.isArray(parsed) && parsed.length) return parsed;
   } catch {
     /* buzilgan yoki mavjud bo‘lmagan ma'lumot */
@@ -21,37 +19,21 @@ const read = (key) => {
   return null;
 };
 
-export const loadRoles = () => {
-  const saved = read(ROLES_KEY);
-  const roles = normalizeRoles(saved ?? createDefaultRoles());
-  // Yangi Reception ruxsatlari avval saqlangan rollarga bir marta qo‘shiladi.
-  try {
-    if (saved && !localStorage.getItem(TEACHER_READONLY_MIGRATION)) {
-      const teacher = roles.find((role) => role.id === 'teacher');
-      if (teacher) {
-        teacher.permissions = [...new Set([...teacher.permissions.filter((permission) => permission !== 'attendance.edit'), 'attendance.view', 'payments.view', 'salaries.view'])];
-        localStorage.setItem(ROLES_KEY, JSON.stringify(roles));
-      }
-      localStorage.setItem(TEACHER_READONLY_MIGRATION, 'done');
-    }
-    if (saved && !localStorage.getItem(RECEPTION_ACCESS_MIGRATION)) {
-      const receptionist = roles.find((role) => role.id === 'reception');
-      if (receptionist) {
-        receptionist.permissions = [...new Set([...receptionist.permissions, 'attendance.view', 'attendance.edit', 'payments.create', 'payments.delete', 'payments.export'])];
-        localStorage.setItem(ROLES_KEY, JSON.stringify(roles));
-      }
-      localStorage.setItem(RECEPTION_ACCESS_MIGRATION, 'done');
-    }
-  } catch {
-    /* Mahalliy saqlash yopiq bo‘lsa ham rol ishlayveradi. */
-  }
-  return roles;
+export const loadRoles = () => normalizeRoles(read(ROLES_KEY) ?? createDefaultRoles());
+export const loadUsers = () => {
+  const saved = read(USERS_KEY);
+  if (saved) return saved;
+  if (!hasBackendSession()) return [];
+  if (sessionIdentity.getItem('educontrol_role') !== 'owner') return [];
+  const username = sessionIdentity.getItem('educontrol_username') || 'Administrator';
+  return [{
+    id: sessionIdentity.getItem('educontrol_user_id') || 'owner', firstName: username, lastName: 'Administrator',
+    email: '', phone: '', login: username, roleId: 'owner', status: 'active', createdAt: today(), lastLoginAt: '', note: 'Tizim egasi',
+  }];
 };
-// Taklif yuborilgan hisob tizimga kira olmaydi; holatni yuklashda faolga ko'tarmang.
-export const loadUsers = () => read(USERS_KEY) ?? createDemoUsers();
 
 const nextUserId = (list) => {
-  const max = list.reduce((m, u) => Math.max(m, Number(u.id.replace(/\D/g, '')) || 0), 0);
+  const max = list.reduce((m, u) => Math.max(m, Number(String(u.id).replace(/\D/g, '')) || 0), 0);
   return `U-${String(max + 1).padStart(4, '0')}`;
 };
 
@@ -61,8 +43,9 @@ const userLog = createLogger({
   module: 'users',
   noun: 'Foydalanuvchi',
   nameOf: userName,
-  ignore: ['lastLoginAt', 'createdAt'],
+  ignore: ['lastLoginAt', 'createdAt', 'password', 'passwordHash'],
   notifyCreate: (u) => ({
+    recipientIds: [u.id],
     category: 'security',
     priority: 'normal',
     title: 'Yangi foydalanuvchi qo‘shildi',
@@ -79,75 +62,78 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 /** Foydalanuvchilar va rollar — bitta joyda, chunki ular o‘zaro bog‘liq (rol o‘chirilganda, foydalanuvchi soni va h.k.). */
 export const useAccess = () => {
-  const [users, setUsers] = useState(loadUsers);
-  const [roles, setRoles] = useState(loadRoles);
-  const latest = useRef({ users, roles });
-
-  useEffect(() => {
-    latest.current.users = users;
+  const [users, setUsers] = useCollectionState(USERS_KEY);
+  const [roles, setRoles] = useCollectionState(ROLES_KEY);
+  const savingUsers = useRef(false);
+  const savingRoles = useRef(false);
+  const saveRoles = useCallback(async (nextRoles) => {
+    if (savingRoles.current) throw new Error('Rol saqlanmoqda. Bir oz kuting.');
+    savingRoles.current = true;
     try {
-      localStorage.setItem(USERS_KEY, JSON.stringify(users));
-    } catch {
-      /* e'tiborsiz */
-    }
-  }, [users]);
-
-  useEffect(() => {
-    latest.current.roles = roles;
+      const saved = hasBackendSession() ? await saveBackendCollection(ROLES_KEY, nextRoles) : nextRoles;
+      setRoles(saved);
+      window.dispatchEvent(new Event('educontrol:roles-saved'));
+    } finally { savingRoles.current = false; }
+  }, [setRoles]);
+  const saveUsers = useCallback(async (nextUsers) => {
+    if (savingUsers.current) throw new Error('Avvalgi o‘zgarish saqlanmoqda. Bir oz kuting.');
+    savingUsers.current = true;
     try {
-      localStorage.setItem(ROLES_KEY, JSON.stringify(roles));
-    } catch {
-      /* e'tiborsiz */
-    }
-  }, [roles]);
+      const savedUsers = hasBackendSession() ? await saveBackendUsers(nextUsers) : nextUsers;
+      setUsers(savedUsers);
+    } finally { savingUsers.current = false; }
+  }, [setUsers]);
+
+
 
   /* ---------- Foydalanuvchilar ---------- */
   const addUser = useCallback((data) => {
-    const created = { ...data, id: nextUserId(latest.current.users), createdAt: today(), lastLoginAt: '' };
-    setUsers((list) => [created, ...list]);
+    const created = { ...data, id: data.id ?? nextUserId(readCollectionSnapshot(USERS_KEY)), createdAt: data.createdAt ?? today(), lastLoginAt: data.lastLoginAt ?? '' };
+    setUsers((list) => [created, ...list.filter((user) => user.id !== created.id)]);
     userLog.created(created);
     return created;
-  }, []);
+  }, [setUsers]);
 
-  const updateUser = useCallback((id, patch) => {
-    const before = latest.current.users.find((u) => u.id === id);
+  const updateUser = useCallback(async (id, patch) => {
+    const before = readCollectionSnapshot(USERS_KEY).find((u) => u.id === id);
+    await saveUsers(readCollectionSnapshot(USERS_KEY).map((u) => u.id === id ? { ...u, ...patch } : u));
     userLog.updated(before, patch);
     if (before && patch.roleId && patch.roleId !== before.roleId) {
-      const name = (rid) => latest.current.roles.find((r) => r.id === rid)?.name ?? rid;
+      const name = (rid) => readCollectionSnapshot(ROLES_KEY).find((r) => r.id === rid)?.name ?? rid;
       security('Foydalanuvchi roli o‘zgartirildi', `${userName(before)}: ${name(before.roleId)} → ${name(patch.roleId)}`);
     }
-    setUsers((list) => list.map((u) => (u.id === id ? { ...u, ...patch } : u)));
-  }, []);
+  }, [saveUsers]);
 
   // O‘chirilgan yozuvlarni qaytaradi — "Qaytarish" (undo) uchun
-  const removeUsers = useCallback((ids) => {
+  const removeUsers = useCallback(async (ids) => {
     const set = new Set(ids);
-    const removed = latest.current.users.filter((u) => set.has(u.id));
-    setUsers((list) => list.filter((u) => !set.has(u.id)));
+    const removed = readCollectionSnapshot(USERS_KEY).filter((u) => set.has(u.id));
+    await saveUsers(readCollectionSnapshot(USERS_KEY).filter((u) => !set.has(u.id)));
     userLog.deleted(removed);
     if (removed.length) security('Foydalanuvchi o‘chirildi', removed.length === 1 ? userName(removed[0]) : `${removed.length} ta foydalanuvchi`);
     return removed;
-  }, []);
+  }, [saveUsers]);
 
-  const restoreUsers = useCallback((items) => {
+  const restoreUsers = useCallback(async (items) => {
+    await saveUsers([...items, ...readCollectionSnapshot(USERS_KEY).filter((u) => !items.some((i) => i.id === u.id))]);
     userLog.restored(items);
-    setUsers((list) => [...items, ...list.filter((u) => !items.some((i) => i.id === u.id))]);
-  }, []);
+  }, [saveUsers]);
 
-  const setUsersStatus = useCallback((ids, status) => {
+  const setUsersStatus = useCallback(async (ids, status) => {
     const set = new Set(ids);
-    const affected = latest.current.users.filter((u) => set.has(u.id) && u.status !== status);
+    const affected = readCollectionSnapshot(USERS_KEY).filter((u) => set.has(u.id) && u.status !== status);
+    await saveUsers(readCollectionSnapshot(USERS_KEY).map((u) => set.has(u.id) ? { ...u, status } : u));
     userLog.statusChanged(affected, status, USER_STATUSES[status]?.label);
     if (status === 'blocked' && affected.length) {
       security('Foydalanuvchi bloklandi', affected.length === 1 ? userName(affected[0]) : `${affected.length} ta foydalanuvchi`);
     }
-    setUsers((list) => list.map((u) => (set.has(u.id) ? { ...u, status } : u)));
-  }, []);
+  }, [saveUsers]);
 
-  const setUsersRole = useCallback((ids, roleId) => {
+  const setUsersRole = useCallback(async (ids, roleId) => {
     const set = new Set(ids);
-    const affected = latest.current.users.filter((u) => set.has(u.id) && u.roleId !== roleId);
-    const roleName = (rid) => latest.current.roles.find((r) => r.id === rid)?.name ?? rid;
+    const affected = readCollectionSnapshot(USERS_KEY).filter((u) => set.has(u.id) && u.roleId !== roleId);
+    await saveUsers(readCollectionSnapshot(USERS_KEY).map((u) => set.has(u.id) ? { ...u, roleId, ...(roleId !== 'teacher' ? { teacherId: '', teacherType: '' } : {}) } : u));
+    const roleName = (rid) => readCollectionSnapshot(ROLES_KEY).find((r) => r.id === rid)?.name ?? rid;
     if (affected.length) {
       const single = affected.length === 1;
       logActivity({
@@ -163,19 +149,19 @@ export const useAccess = () => {
         items: single ? [] : affected.map((u) => ({ id: u.id, name: userName(u) })),
       });
     }
-    setUsers((list) => list.map((u) => (set.has(u.id) ? { ...u, roleId } : u)));
-  }, []);
+  }, [saveUsers]);
 
   /* ---------- Rollar ---------- */
-  const addRole = useCallback((data) => {
+  const addRole = useCallback(async (data) => {
     const created = { ...data, id: `custom-${Date.now().toString(36)}`, system: false, locked: false };
-    setRoles((list) => [...list, created]);
+    await saveRoles([...readCollectionSnapshot(ROLES_KEY), created]);
     roleLog.created(created);
     return created;
-  }, []);
+  }, [saveRoles]);
 
-  const updateRole = useCallback((id, patch) => {
-    const before = latest.current.roles.find((r) => r.id === id);
+  const updateRole = useCallback(async (id, patch) => {
+    const before = readCollectionSnapshot(ROLES_KEY).find((r) => r.id === id);
+    await saveRoles(readCollectionSnapshot(ROLES_KEY).map((r) => r.id === id ? { ...r, ...patch } : r));
     if (before) {
       const changes = diffObjects(before, patch, { ignore: ['permissions', 'locked', 'system'] });
       const permsChanged = patch.permissions !== undefined && JSON.stringify(patch.permissions) !== JSON.stringify(before.permissions);
@@ -193,27 +179,27 @@ export const useAccess = () => {
         if (permsChanged) security('Rol ruxsatlari o‘zgartirildi', patch.name ?? before.name);
       }
     }
-    setRoles((list) => list.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  }, []);
+  }, [saveRoles]);
 
-  const removeRole = useCallback((id) => {
-    const removed = latest.current.roles.find((r) => r.id === id) ?? null;
-    setRoles((list) => list.filter((r) => r.id !== id));
+  const removeRole = useCallback(async (id) => {
+    const removed = readCollectionSnapshot(ROLES_KEY).find((r) => r.id === id) ?? null;
+    await saveRoles(readCollectionSnapshot(ROLES_KEY).filter((r) => r.id !== id));
     if (removed) {
       roleLog.deleted([removed]);
       security('Rol o‘chirildi', removed.name);
     }
     return removed;
-  }, []);
+  }, [saveRoles]);
 
-  const restoreRole = useCallback((role) => {
+  const restoreRole = useCallback(async (role) => {
+    await saveRoles(readCollectionSnapshot(ROLES_KEY).some((r) => r.id === role.id) ? readCollectionSnapshot(ROLES_KEY) : [...readCollectionSnapshot(ROLES_KEY), role]);
     roleLog.restored([role]);
-    setRoles((list) => (list.some((r) => r.id === role.id) ? list : [...list, role]));
-  }, []);
+  }, [saveRoles]);
 
-  const resetRole = useCallback((id) => {
+  const resetRole = useCallback(async (id) => {
     const permissions = defaultPermissions(id);
-    const role = latest.current.roles.find((r) => r.id === id);
+    const role = readCollectionSnapshot(ROLES_KEY).find((r) => r.id === id);
+    if (permissions) await saveRoles(readCollectionSnapshot(ROLES_KEY).map((r) => r.id === id ? { ...r, permissions } : r));
     if (permissions && role) {
       logActivity({
         module: 'roles',
@@ -224,18 +210,12 @@ export const useAccess = () => {
         entityName: role.name,
       });
     }
-    if (permissions) setRoles((list) => list.map((r) => (r.id === id ? { ...r, permissions } : r)));
-  }, []);
+  }, [saveRoles]);
 
-  const resetDemo = useCallback(() => {
-    logActivity({ module: 'users', action: 'system', severity: 'warning', title: 'Foydalanuvchilar va rollar DEMO holatga qaytarildi' });
-    setUsers(createDemoUsers());
-    setRoles(normalizeRoles(createDefaultRoles()));
-  }, []);
 
   return {
     users, roles,
     addUser, updateUser, removeUsers, restoreUsers, setUsersStatus, setUsersRole,
-    addRole, updateRole, removeRole, restoreRole, resetRole, resetDemo,
+    addRole, updateRole, removeRole, restoreRole, resetRole,
   };
 };

@@ -1,3 +1,4 @@
+import { memoryCache } from '../../../api/memoryStore.js';
 import { isoDate } from '../finance/financeStore';
 import { parseIso } from '../students/billing';
 
@@ -78,7 +79,7 @@ export const monthsInRange = (from, to) => {
 
 export const loadAttendance = () => {
   try {
-    const parsed = JSON.parse(localStorage.getItem(ATT_KEY));
+    const parsed = JSON.parse(memoryCache.getItem(ATT_KEY));
     return parsed && typeof parsed === 'object' ? parsed : {};
   } catch {
     return {};

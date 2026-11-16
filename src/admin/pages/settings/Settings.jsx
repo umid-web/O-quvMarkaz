@@ -36,7 +36,7 @@ const SECTIONS = [
   { id: 'org', label: 'Markaz', hint: 'Nomi, aloqa, ish vaqti', icon: Building2 },
   { id: 'appearance', label: 'Ko‘rinish', hint: 'Mavzu va til', icon: Palette },
   { id: 'finance', label: 'Moliya', hint: 'To‘lov va hisob-faktura', icon: Wallet },
-  { id: 'attendance', label: 'Davomat', hint: 'Kechikish qoidalari', icon: ClipboardCheck },
+  { id: 'attendance', label: 'Davomat', hint: 'Xabar sozlamalari', icon: ClipboardCheck },
   { id: 'notifications', label: 'Bildirishnomalar', hint: 'Email, SMS, Telegram', icon: Bell },
   { id: 'security', label: 'Xavfsizlik', hint: 'Sessiya va parol', icon: ShieldCheck },
   { id: 'data', label: 'Ma’lumotlar', hint: 'Zaxira va tiklash', icon: Database },
@@ -97,17 +97,9 @@ const validate = (s) => {
   if (!/^[A-Za-z0-9]{2,8}$/.test(s.finance.invoicePrefix.trim())) {
     e['finance.invoicePrefix'] = '2–8 ta lotin harf yoki raqam';
   }
-  const late = Number(s.finance.lateFeePercent);
-  if (!Number.isFinite(late) || late < 0 || late > 50) e['finance.lateFeePercent'] = '0 dan 50 gacha bo‘lsin';
   const due = Number(s.finance.dueDay);
   if (!Number.isInteger(due) || due < 1 || due > 28) e['finance.dueDay'] = '1–28 oralig‘ida bo‘lsin';
   if (!s.finance.paymentMethods.length) e['finance.paymentMethods'] = 'Kamida bitta to‘lov usulini tanlang';
-  const lateM = Number(s.attendance.lateMinutes);
-  const absM = Number(s.attendance.autoAbsentMinutes);
-  if (!Number.isInteger(lateM) || lateM < 0 || lateM > 120) e['attendance.lateMinutes'] = '0–120 daqiqa';
-  if (!Number.isInteger(absM) || absM < lateM || absM > 180) {
-    e['attendance.autoAbsentMinutes'] = 'Kechikishdan katta va 180 dan oshmasin';
-  }
   const sess = Number(s.security.sessionMinutes);
   const pmin = Number(s.security.passwordMinLength);
   if (!Number.isInteger(sess) || sess < 15 || sess > 480) e['security.sessionMinutes'] = '15–480 daqiqa';
@@ -137,6 +129,8 @@ const Settings = () => {
   });
   const [errors, setErrors] = useState({});
   const [confirm, setConfirm] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const fileRef = useRef(null);
   const importRef = useRef(null);
   const themeAtOpen = useRef(theme);
@@ -179,17 +173,15 @@ const Settings = () => {
     window.history.replaceState(null, '', `#${id}`);
   };
 
-  const persist = useCallback(() => {
+  const persist = useCallback(async () => {
+    if (savingRef.current) return false;
     const next = cloneSettings(draft);
     next.appearance.theme = theme;
     next.org.phone = phoneDigits(next.org.phone);
     next.org.name = next.org.name.trim();
     next.org.email = next.org.email.trim();
     next.finance.invoicePrefix = next.finance.invoicePrefix.trim().toUpperCase();
-    next.finance.lateFeePercent = Number(next.finance.lateFeePercent) || 0;
     next.finance.dueDay = Number(next.finance.dueDay) || 10;
-    next.attendance.lateMinutes = Number(next.attendance.lateMinutes) || 0;
-    next.attendance.autoAbsentMinutes = Number(next.attendance.autoAbsentMinutes) || 0;
     next.security.sessionMinutes = Number(next.security.sessionMinutes) || 60;
     next.security.passwordMinLength = Number(next.security.passwordMinLength) || 8;
     const errs = validate(next);
@@ -200,11 +192,18 @@ const Settings = () => {
       toast.error('Ba’zi maydonlarni tekshiring');
       return false;
     }
-    const stored = save(next);
-    themeAtOpen.current = stored.appearance.theme;
-    setDraft(cloneSettings(stored));
-    toast.success('Sozlamalar saqlandi');
-    return true;
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      const stored = await save(next);
+      themeAtOpen.current = stored.appearance.theme;
+      setDraft(cloneSettings(stored));
+      toast.success('Sozlamalar saqlandi');
+      return true;
+    } catch (error) {
+      toast.error(error.message);
+      return false;
+    } finally { savingRef.current = false; setSaving(false); }
   }, [draft, save, theme, toast]);
 
   const discard = () => {
@@ -286,15 +285,21 @@ const Settings = () => {
     reader.readAsText(file);
   };
 
-  const applyDefaults = () => {
+  const applyDefaults = async () => {
+    if (savingRef.current) return;
     const next = cloneSettings(DEFAULT_SETTINGS);
     next.appearance.theme = theme;
-    const stored = save(next);
-    themeAtOpen.current = theme;
-    setDraft(cloneSettings(stored));
-    setErrors({});
-    setConfirm(null);
-    toast.success('Standart sozlamalar tiklandi');
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      const stored = await save(next);
+      themeAtOpen.current = theme;
+      setDraft(cloneSettings(stored));
+      setErrors({});
+      setConfirm(null);
+      toast.success('Standart sozlamalar tiklandi');
+    } catch (error) { toast.error(error.message); }
+    finally { savingRef.current = false; setSaving(false); }
   };
 
   const toggleDay = (value) => {
@@ -320,10 +325,10 @@ const Settings = () => {
           </p>
         </div>
         <div className="page-head__actions">
-          <button type="button" className="btn btn--secondary" onClick={discard} disabled={!dirty}>
+          <button type="button" className="btn btn--secondary" onClick={discard} disabled={!dirty || saving}>
             Bekor qilish
           </button>
-          <button type="button" className="btn btn--primary" onClick={persist} disabled={!dirty}>
+          <button type="button" className="btn btn--primary" onClick={persist} disabled={!dirty || saving}>
             <Save size={16} /> Saqlash
           </button>
         </div>
@@ -504,7 +509,7 @@ const Settings = () => {
           )}
 
           {section === 'finance' && (
-            <Card title="Moliyaviy qoidalar" subtitle="To‘lov muddati, kechikish va qabul qilinadigan usullar.">
+            <Card title="Moliyaviy qoidalar" subtitle="To‘lov muddati va qabul qilinadigan usullar.">
               <div className="settings-grid">
                 <Field label="Valyuta" hint="Hisobotlar so‘mda yuritiladi">
                   <select className="input" value={draft.finance.currency} onChange={(e) => setFin('currency', e.target.value)}>
@@ -517,9 +522,6 @@ const Settings = () => {
                 </Field>
                 <Field label="To‘lov sanasi (oy kuni)" error={errors['finance.dueDay']} hint="Har oy shu kunga qadar">
                   <input className="input" type="number" min={1} max={28} value={draft.finance.dueDay} onChange={(e) => setFin('dueDay', e.target.value)} />
-                </Field>
-                <Field label="Kechikish jarimasi (%)" error={errors['finance.lateFeePercent']}>
-                  <input className="input" type="number" min={0} max={50} step={0.5} value={draft.finance.lateFeePercent} onChange={(e) => setFin('lateFeePercent', e.target.value)} />
                 </Field>
                 <Field label="Moliyaviy yil boshlanishi">
                   <select className="input" value={draft.finance.fiscalYearStart} onChange={(e) => setFin('fiscalYearStart', Number(e.target.value))}>
@@ -550,22 +552,8 @@ const Settings = () => {
           )}
 
           {section === 'attendance' && (
-            <Card title="Davomat qoidalari" subtitle="Darsga kechikish va avtomatik yo‘qlama chegaralari.">
-              <div className="settings-grid">
-                <Field label="Kechikish (daqiqa)" error={errors['attendance.lateMinutes']} hint="Shu vaqtdan keyin «kech» deb belgilanadi">
-                  <input className="input" type="number" min={0} max={120} value={draft.attendance.lateMinutes} onChange={(e) => setAtt('lateMinutes', e.target.value)} />
-                </Field>
-                <Field label="Yo‘qlama (daqiqa)" error={errors['attendance.autoAbsentMinutes']} hint="Shu vaqtdan keyin avtomatik «yo‘q»">
-                  <input className="input" type="number" min={0} max={180} value={draft.attendance.autoAbsentMinutes} onChange={(e) => setAtt('autoAbsentMinutes', e.target.value)} />
-                </Field>
-              </div>
+            <Card title="Davomat sozlamalari">
               <div className="settings-toggles">
-                <Toggle
-                  checked={draft.attendance.requireNote}
-                  onChange={(v) => setAtt('requireNote', v)}
-                  label="Sababsiz yo‘qlama uchun izoh majburiy"
-                  hint="O‘qituvchi izoh yozmasdan saqlay olmaydi"
-                />
                 <Toggle
                   checked={draft.attendance.notifyParents}
                   onChange={(v) => setAtt('notifyParents', v)}
@@ -599,7 +587,7 @@ const Settings = () => {
           )}
 
           {section === 'security' && (
-            <Card title="Xavfsizlik" subtitle="Sessiya muddati va parol talablari. 2FA — DEMO rejimida.">
+            <Card title="Xavfsizlik" subtitle="Sessiya muddati va parol talablari. Ikki bosqichli tasdiqlash hali ulanmagan.">
               <div className="settings-grid">
                 <Field label="Sessiya (daqiqa)" error={errors['security.sessionMinutes']} hint="Harakatsizlikdan keyin chiqish">
                   <input className="input" type="number" min={15} max={480} value={draft.security.sessionMinutes} onChange={(e) => setSec('sessionMinutes', e.target.value)} />
@@ -610,15 +598,16 @@ const Settings = () => {
               </div>
               <div className="settings-toggles">
                 <Toggle
-                  checked={draft.security.twoFactor}
-                  onChange={(v) => setSec('twoFactor', v)}
+                  checked={false}
+                  disabled
                   label="Ikki bosqichli tasdiqlash"
-                  hint="DEMO — haqiqiy 2FA keyingi versiyada"
+                  hint="Hozir mavjud emas. Kirishda faqat parol tekshiriladi."
                 />
                 <Toggle
-                  checked={draft.security.loginAlerts}
-                  onChange={(v) => setSec('loginAlerts', v)}
+                  checked={false}
+                  disabled
                   label="Yangi qurilmadan kirish haqida xabar"
+                  hint="Hozir mavjud emas. Kirishlar server faoliyat jurnaliga yoziladi."
                 />
               </div>
               <div style={{ marginTop: '1rem' }}>
@@ -678,7 +667,7 @@ const Settings = () => {
           <span>Saqlanmagan o‘zgarishlar bor</span>
           <div>
             <button type="button" className="btn btn--ghost btn--sm" onClick={discard}>Bekor qilish</button>
-            <button type="button" className="btn btn--primary btn--sm" onClick={persist}><Save size={14} /> Saqlash</button>
+            <button type="button" className="btn btn--primary btn--sm" onClick={persist} disabled={saving}><Save size={14} /> Saqlash</button>
           </div>
         </div>
       )}

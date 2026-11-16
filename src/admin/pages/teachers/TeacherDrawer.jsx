@@ -1,3 +1,4 @@
+import { useCollectionState } from '../../../api/memoryStore.js';
 import { useMemo } from 'react';
 import {
   Banknote,
@@ -51,10 +52,11 @@ const TeacherDrawer = ({ teacher, students, onClose, onEdit, onDelete, hideSalar
     })).filter((d) => d.lessons.length > 0);
   }, [teacher]);
 
+  const [receivedPayments] = useCollectionState('edu-payments-v1');
   if (!teacher) return null;
 
   const status = TEACHER_STATUSES[teacher.status];
-  const stats = getTeacherStats(teacher, students);
+  const stats = getTeacherStats(teacher, students, receivedPayments);
   const years = age(teacher.birthDate);
   const salaryLabel = SALARY_TYPES.find((t) => t.value === teacher.salaryType)?.label;
 
@@ -110,6 +112,7 @@ const TeacherDrawer = ({ teacher, students, onClose, onEdit, onDelete, hideSalar
           <Row icon={Phone} label="Telefon">{formatPhone(teacher.phone)}</Row>
           <Row icon={MapPin} label="Manzil">{teacher.address || '—'}</Row>
           <Row icon={BookOpen} label="Fanlari">{teacher.subjects.join(', ')}</Row>
+          <Row icon={BookOpen} label="Darajasi">{teacher.level || 'Kiritilmagan'}</Row>
           <Row icon={GraduationCap} label="Ma'lumoti va tajribasi">
             {teacher.education} · {teacher.experience} yil tajriba
           </Row>

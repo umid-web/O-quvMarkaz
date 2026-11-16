@@ -20,7 +20,7 @@
 
 .fin-grid--exp { grid-template-columns: minmax(0, 1fr) 320px; align-items: start; @include respond($bp-lg) { grid-template-columns: 1fr; } }
 .fin-note { display: block; font-size: 0.8rem; }
-.fin-actions { display: flex; gap: 0.35rem; justify-content: flex-end; }
+.fin-actions { display: flex; align-items: center; gap: 0.35rem; justify-content: flex-end; }
 .sort-btn { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0; border: 0; background: none; color: inherit; font: inherit; font-weight: 600; cursor: pointer; }
 .fin-receipt { margin: 0; display: flex; flex-direction: column; gap: 0.7rem; div { display: flex; justify-content: space-between; gap: 1rem; padding-bottom: 0.6rem; border-bottom: 1px dashed var(--border); } dt { color: var(--text-muted); } dd { margin: 0; font-weight: 600; } &__total { border-bottom: 0 !important; dd { color: var(--success); font-size: 1.2rem; } } }
 
@@ -32,7 +32,7 @@
   &--paid { background: linear-gradient(90deg, var(--success), color-mix(in srgb, var(--success) 70%, white)); }
   &--partial { background: linear-gradient(90deg, var(--warning), color-mix(in srgb, var(--warning) 70%, white)); }
   &--unpaid { background: var(--danger); } }
-.sal-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; div { display: flex; flex-direction: column; padding: 0.6rem 0.7rem; border-radius: $radius-sm; background: var(--surface-2); span { font-size: 0.75rem; color: var(--text-muted); } strong { font-size: 0.9rem; font-variant-numeric: tabular-nums; } } }
+.sal-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; div { display: flex; min-width: 0; flex-direction: column; padding: 0.6rem 0.7rem; border-radius: $radius-sm; background: var(--surface-2); span { font-size: 0.75rem; color: var(--text-muted); } strong { overflow-wrap: anywhere; font-size: 0.9rem; font-variant-numeric: tabular-nums; } } }
 .sal-history { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.9rem;
   li { display: grid; grid-template-columns: 10px 1fr auto auto; align-items: center; gap: 0.8rem; div { display: flex; flex-direction: column; line-height: 1.35; } } }
 .sal-dot { width: 10px; height: 10px; border-radius: 50%; @each $t in success, info, primary, danger { &--#{$t} { background: var(--#{$t}); } } }
@@ -116,3 +116,23 @@
 }
 
 .sal-person { display: flex; align-items: center; gap: 0.7rem; div { display: flex; flex-direction: column; line-height: 1.3; } }
+
+.fin-tab { font-size: 0.8rem; padding: 0.55rem 0.8rem; }
+.fin-list li, .fin-receipt div { flex-wrap: wrap; gap: 0.4rem 0.75rem; }
+.fin-list li > div, .sal-person > div { min-width: 0; overflow-wrap: anywhere; }
+.fin-split li > div { font-size: 0.8rem; gap: 0.5rem; }
+.fin-hint { font-size: 0.76rem; padding: 0.55rem 0.7rem; }
+.fin-form label { font-size: 0.78rem; }
+.fin-receipt { font-size: 0.8rem; }
+.fin-receipt dd { overflow-wrap: anywhere; }
+.sal-summary strong { font-weight: 600; }
+.sal-history li { grid-template-columns: 8px minmax(0, 1fr) auto auto; gap: 0.6rem; font-size: 0.8rem; }
+.sal-history li > div { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .finance-page .toolbar, .payment-filters { flex-wrap: wrap; }
+  .finance-page .toolbar__filters { width: 100%; min-width: 0; }
+  .finance-page .toolbar__filters > .input, .payment-filters > .input { min-width: 0; max-width: 100%; flex: 1 1 130px; }
+  .sal-summary { grid-template-columns: 1fr; }
+  .sal-history li { grid-template-columns: 8px minmax(0, 1fr) auto; }
+  .sal-history li > :last-child { grid-column: 3; }
+}

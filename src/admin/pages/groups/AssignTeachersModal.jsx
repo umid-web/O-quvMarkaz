@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import Modal from '../../components/ui/Modal';
 import TeacherPicker from './TeacherPicker';
-import { formatGroupSchedule } from './groupsData';
+import { formatGroupSchedule, mainTeacherProblem, supportProblem, teacherName } from './groupsData';
 
 /** Tezkor biriktirish: guruh ma'lumotlariga tegmasdan faqat asosiy va qo‘shimcha ustozlarni o‘zgartiradi. */
 const Body = ({ group, team, teachers, supportTeachers, onClose, onSubmit }) => {
   const [mainId, setMainId] = useState(team.main?.id ?? '');
   const [supportIds, setSupportIds] = useState(team.support.map((p) => p.id));
+  const [error, setError] = useState('');
 
   return (
     <Modal
@@ -27,6 +28,14 @@ const Body = ({ group, team, teachers, supportTeachers, onClose, onSubmit }) => 
         className="student-form"
         onSubmit={(e) => {
           e.preventDefault();
+          const main = teachers.find((teacher) => teacher.id === mainId);
+          const mainIssue = main && mainTeacherProblem(main, group);
+          const support = supportTeachers.find((person) => supportIds.includes(person.id) && supportProblem(person, group));
+          if (mainIssue || support) {
+            setError(mainIssue ? `${teacherName(main)}: ${mainIssue}` : `${teacherName(support)}: ${supportProblem(support, group)}`);
+            return;
+          }
+          setError('');
           onSubmit({ mainId, supportIds });
         }}
       >
@@ -39,6 +48,7 @@ const Body = ({ group, team, teachers, supportTeachers, onClose, onSubmit }) => 
             supportIds={supportIds}
             onMain={setMainId}
             onSupport={setSupportIds}
+            error={error}
           />
         </fieldset>
       </form>

@@ -1,6 +1,11 @@
 @use '../styles/variables' as *;
 
-$sidebar-width: 264px;
+[data-theme='light'] {
+  .menu-group__title { opacity: 1; color: #53647a; }
+  .menu-item__icon { stroke-width: 1.9; }
+}
+
+$sidebar-width: 240px;
 
 .admin-sidebar {
   position: sticky;
@@ -10,7 +15,8 @@ $sidebar-width: 264px;
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: var(--sidebar-bg);
+  background: color-mix(in srgb, var(--sidebar-bg) 94%, transparent);
+  backdrop-filter: blur(18px);
   color: var(--sidebar-text);
   border-right: 1px solid var(--sidebar-border);
   overflow-y: auto;
@@ -55,7 +61,7 @@ $sidebar-width: 264px;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: 1.05rem;
-    font-weight: 700;
+    font-weight: 600;
     letter-spacing: -0.01em;
     color: var(--sidebar-text-active);
   }
@@ -94,11 +100,11 @@ $sidebar-width: 264px;
 }
 
 .menu-group {
-  margin-top: 1.1rem;
+  margin-top: 0.85rem;
 
   &__title {
     padding: 0 0.75rem 0.4rem;
-    font-size: 0.7rem;
+    font-size: 0.63rem;
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -110,18 +116,21 @@ $sidebar-width: 264px;
 .menu-item {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.55rem 0.75rem;
+  gap: 0.65rem;
+  padding: 0.5rem 0.7rem;
   margin-bottom: 2px;
   border-radius: $radius-sm;
   color: var(--sidebar-text);
-  font-size: 0.9rem;
+  font-size: 0.82rem;
   font-weight: 500;
   text-decoration: none;
   transition: all $transition-base;
 
   &__icon {
     flex-shrink: 0;
+    width: 17px;
+    height: 17px;
+    stroke-width: 1.7;
   }
 
   &__label {

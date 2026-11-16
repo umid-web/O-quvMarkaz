@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { CheckCircle2, Info, X, XCircle } from 'lucide-react';
 import { ToastContext } from './toastContext';
 import './Toast.scss';
+import { flushPending, hasUnsavedChanges, getSessionGeneration } from '../../../api/backend.js';
 
 const ICONS = { success: CheckCircle2, error: XCircle, info: Info };
 const DURATION = 5000;
@@ -21,8 +22,15 @@ export const ToastProvider = ({ children }) => {
   const push = useCallback(
     (toast) => {
       const id = ++counter.current;
-      setToasts((list) => [...list.slice(-3), { id, ...toast }]);
-      timers.current.set(id, setTimeout(() => dismiss(id), toast.duration ?? DURATION));
+      const generation = getSessionGeneration();
+      const show = () => {
+        if (generation !== getSessionGeneration()) return;
+        setToasts((list) => [...list.slice(-3), { id, ...toast }]);
+        timers.current.set(id, setTimeout(() => dismiss(id), toast.duration ?? DURATION));
+      };
+      // Optimistic collection edits are acknowledged before a success/undo notice.
+      if (toast.type !== 'error' && hasUnsavedChanges()) void flushPending().then(show).catch(() => {});
+      else show();
       return id;
     },
     [dismiss],

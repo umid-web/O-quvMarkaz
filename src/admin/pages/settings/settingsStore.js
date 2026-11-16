@@ -1,5 +1,6 @@
-// DEMO: sozlamalar brauzerda (localStorage) saqlanadi. Backend ulanganda faqat shu
-// fayldagi load/save API so‘rovlariga almashtiriladi — sahifalar kodi o‘zgarmaydi.
+import { memoryCache } from '../../../api/memoryStore.js';
+import { saveBackendCollection } from '../../../api/backend.js';
+// Server-backed data is held only in the tab-local React store.
 
 export const STORAGE_KEY = 'edu-settings-v1';
 
@@ -15,23 +16,19 @@ export const WEEK_DAYS = [
 
 export const PAYMENT_METHODS = [
   { value: 'cash', label: 'Naqd' },
-  { value: 'card', label: 'Karta' },
   { value: 'click', label: 'Click' },
-  { value: 'payme', label: 'Payme' },
-  { value: 'uzum', label: 'Uzum' },
-  { value: 'bank', label: 'Bank o‘tkazmasi' },
 ];
 
 export const DEFAULT_SETTINGS = {
   org: {
     name: 'EduControl Pro',
-    legalName: 'EduControl Pro MCHJ',
-    phone: '998901234567',
-    email: 'info@educontrol.uz',
-    website: 'https://educontrol.uz',
-    address: 'Toshkent sh., Yunusobod tumani, Amir Temur ko‘chasi 108',
-    inn: '305123456',
-    director: 'Karimova Dilnoza',
+    legalName: '',
+    phone: '',
+    email: '',
+    website: '',
+    address: '',
+    inn: '',
+    director: '',
     timezone: 'Asia/Tashkent',
     workStart: '09:00',
     workEnd: '20:00',
@@ -47,15 +44,11 @@ export const DEFAULT_SETTINGS = {
   finance: {
     currency: 'UZS',
     invoicePrefix: 'INV',
-    lateFeePercent: 0,
     dueDay: 10,
-    paymentMethods: ['cash', 'card', 'click', 'payme'],
+    paymentMethods: ['cash', 'click'],
     fiscalYearStart: 1,
   },
   attendance: {
-    lateMinutes: 15,
-    autoAbsentMinutes: 30,
-    requireNote: true,
     notifyParents: true,
   },
   notifications: {
@@ -94,26 +87,26 @@ const merge = (base, patch) => {
 export const cloneSettings = (value) => JSON.parse(JSON.stringify(value));
 
 /** Noma’lum JSON ni standart sxema bilan birlashtiradi (import uchun). */
-export const hydrateSettings = (parsed) => merge(cloneSettings(DEFAULT_SETTINGS), parsed);
+export const hydrateSettings = (parsed) => {
+  const settings = merge(cloneSettings(DEFAULT_SETTINGS), parsed);
+  const methods = settings.finance.paymentMethods.filter((method) => ['cash', 'click'].includes(method));
+  settings.finance.paymentMethods = methods.length ? [...new Set(methods)] : ['cash', 'click'];
+  return settings;
+};
 
 export const loadSettings = () => {
   try {
-    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (isPlainObject(parsed)) return merge(cloneSettings(DEFAULT_SETTINGS), parsed);
+    const parsed = JSON.parse(memoryCache.getItem(STORAGE_KEY));
+    if (isPlainObject(parsed)) return hydrateSettings(parsed);
   } catch {
     /* buzilgan yoki mavjud bo‘lmagan */
   }
   return cloneSettings(DEFAULT_SETTINGS);
 };
 
-export const saveSettings = (settings) => {
+export const saveSettings = async (settings) => {
   const next = { ...settings, meta: { ...settings.meta, updatedAt: new Date().toISOString() } };
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  } catch {
-    /* kvota yoki private rejim */
-  }
-  return next;
+  return saveBackendCollection(STORAGE_KEY, next);
 };
 
 export const settingsEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b);

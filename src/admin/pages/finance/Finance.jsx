@@ -1,3 +1,4 @@
+import { sessionIdentity } from '../../../api/memoryStore.js';
 import { useMemo, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -10,14 +11,15 @@ import { downloadCsv } from '../../utils/csv';
 import { formatDate, formatMoney, formatPhone, formatSom } from '../../utils/format';
 import { useStudents } from '../students/useStudents';
 import { PAYMENT_STATUSES, getPaymentStatus } from '../students/studentsData';
-import { EXPENSE_CATEGORIES, METHODS, categoryLabel, isoDate, useExpenses, usePayments } from './financeStore';
+import { EXPENSE_CATEGORIES, METHODS, isoDate, useExpenses, usePayments } from './financeStore';
 import { loadRoles } from '../users-roles/usersStore';
 import { loadGroups } from '../groups/groupsStore';
 import { loadCourses } from '../courses/coursesStore';
+import { useCurrentTime } from '../../useCurrentTime';
 import '../students/Students.scss';
 import './Finance.scss';
 
-export const TABS = [
+const TABS = [
   { to: '/admin/finance', label: 'Umumiy ko‘rinish', icon: Wallet, end: true },
   { to: '/admin/payments', label: 'To‘lovlar', icon: Receipt },
   { to: '/admin/debts', label: 'Qarzdorlik', icon: AlertTriangle },
@@ -31,8 +33,8 @@ const fullName = (s) => `${s.lastName} ${s.firstName}`;
 export const FinTabs = ({ onNavigate }) => {
   const location = useLocation();
   const reception = location.pathname.startsWith('/reception');
-  const role = reception ? loadRoles().find((item) => item.id === sessionStorage.getItem('educontrol_role')) : null;
-  const tabs = TABS.filter(({ to }) => !reception || role?.permissions?.includes(`${to.slice('/admin/'.length)}.view`));
+  const role = loadRoles().find((item) => item.id === sessionIdentity.getItem('educontrol_role'));
+  const tabs = TABS.filter(({ to }) => role?.permissions?.includes(`${to.slice('/admin/'.length)}.view`));
   return (
   <nav className="fin-tabs" aria-label="Moliya bo‘limlari">
     {tabs.map(({ to, label, icon: Icon, end }) => (
@@ -55,7 +57,8 @@ const Finance = ({ view = 'overview' }) => {
   const [revenueOpen, setRevenueOpen] = useState(false);
   const [revenueMonth, setRevenueMonth] = useState('all');
 
-  const now = new Date();
+  const timestamp = useCurrentTime();
+  const now = new Date(timestamp);
   const monthKey = isoDate(now).slice(0, 7);
   const debtors = useMemo(
     () => students.filter((s) => s.debt > 0 && (s.status === 'active' || s.status === 'dropped')).sort((a, b) => b.debt - a.debt),
@@ -103,9 +106,7 @@ const Finance = ({ view = 'overview' }) => {
   }, [expenses, monthKey]);
 
   const match = (text) => text.toLowerCase().includes(q.trim().toLowerCase());
-  const payRows = payments.filter((p) => (filter === 'all' || p.method === filter) && match(`${p.name} ${p.studentId} ${p.group}`));
   const debtRows = debtors.filter((s) => (filter === 'all' || getPaymentStatus(s) === filter) && match(`${fullName(s)} ${s.id} ${s.group}`));
-  const expRows = expenses.filter((e) => (filter === 'all' || e.category === filter) && match(`${e.title} ${categoryLabel(e.category)}`));
 
   const submitPayment = (data) => {
     const s = students.find((x) => x.id === data.studentId);
@@ -147,11 +148,7 @@ const Finance = ({ view = 'overview' }) => {
         </div>
       </div>
 
-      <nav className="fin-tabs" aria-label="Moliya bo‘limlari">
-        {TABS.map(({ to, label, icon: Icon, end }) => (
-          <NavLink key={to} to={to} end={end} className={({ isActive }) => `fin-tab${isActive ? ' is-active' : ''}`} onClick={() => { setFilter('all'); setQ(''); setLimit(20); }}><Icon size={16} /> {label}</NavLink>
-        ))}
-      </nav>
+      <FinTabs onNavigate={() => { setFilter('all'); setQ(''); setLimit(20); }} />
 
       <div className="students-stats">
         <StatCard title="Oylik tushum" value={formatMoney(monthIncome)} icon={Wallet} tone="success" />
@@ -258,7 +255,7 @@ export const PaymentModal = ({ students, initial, onClose, onSubmit }) => {
   const [studentId, setStudentId] = useState(initial);
   const [amount, setAmount] = useState(initial ? String(students.find((s) => s.id === initial)?.debt || '') : '');
   const [method, setMethod] = useState(METHODS[0]);
-  const [date, setDate] = useState(isoDate(new Date()));
+  const [date, setDate] = useState(() => isoDate(new Date()));
   const student = students.find((s) => s.id === studentId);
   const value = Number(amount) || 0;
   const valid = student && value > 0;
@@ -282,7 +279,7 @@ export const PaymentModal = ({ students, initial, onClose, onSubmit }) => {
 };
 
 export const ExpenseModal = ({ initial, onClose, onSubmit }) => {
-  const [f, setF] = useState(initial ?? { title: '', category: 'other', amount: '', date: isoDate(new Date()), note: '' });
+  const [f, setF] = useState(() => initial ?? { title: '', category: 'other', amount: '', date: isoDate(new Date()), note: '' });
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const valid = f.title.trim() && Number(f.amount) > 0;
   return (

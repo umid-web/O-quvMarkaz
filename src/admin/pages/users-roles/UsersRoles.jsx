@@ -20,7 +20,8 @@ const TABS = [
  * Bo‘limlar yashirinadi, lekin o‘chirilmaydi — filtr va saqlanmagan ruxsatlar tab almashganda yo‘qolmaydi.
  */
 const UsersRoles = () => {
-  const access = useAccess();
+  const fullAccess = useAccess();
+  const access = useMemo(() => ({ ...fullAccess, users: fullAccess.users.filter((user) => user.roleId !== 'owner') }), [fullAccess]);
   const [params, setParams] = useSearchParams();
   const tab = params.get('tab') === 'roles' ? 'roles' : 'users';
 

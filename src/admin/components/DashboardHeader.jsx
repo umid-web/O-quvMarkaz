@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { RefreshCw, Download } from 'lucide-react';
-import { PERIODS } from '../data/dashboardDemoData';
+import { PERIODS } from '../data/dashboardOptions';
 import { formatLongDate } from '../utils/format';
 import './DashboardHeader.scss';
 

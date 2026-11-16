@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import Modal from '../../components/ui/Modal';
-import { COURSE_COLORS, COURSE_STATUS_OPTIONS, LEVELS } from './coursesData';
+import { COURSE_COLORS, COURSE_STATUS_OPTIONS } from './coursesData';
 
 const EMPTY = {
   name: '',
+  subject: '',
   description: '',
-  level: LEVELS[0],
+  level: '',
   durationMonths: '6',
   lessonMinutes: '90',
   fee: '',
@@ -19,6 +20,7 @@ const toForm = (course) =>
     ? {
         ...EMPTY,
         ...course,
+        subject: course.subject || course.name,
         durationMonths: String(course.durationMonths),
         lessonMinutes: String(course.lessonMinutes),
         fee: String(course.fee),
@@ -29,6 +31,7 @@ const toForm = (course) =>
 const validate = (f, courses, selfId) => {
   const e = {};
   const name = f.name.trim();
+  if (f.subject.trim().length < 2) e.subject = 'Fan nomini kiriting';
   if (name.length < 2) e.name = 'Kurs nomi kamida 2 ta belgidan iborat bo‘lsin';
   else if (courses.some((c) => c.id !== selfId && c.name.toLowerCase() === name.toLowerCase())) {
     e.name = 'Bunday nomli kurs allaqachon mavjud';
@@ -79,8 +82,9 @@ const FormBody = ({ course, courses, locked, onClose, onSubmit }) => {
     onSubmit({
       ...(course ?? { createdAt: new Date().toISOString().slice(0, 10) }),
       name: form.name.trim(),
+      subject: form.subject.trim(),
       description: form.description.trim(),
-      level: form.level,
+      level: form.level.trim(),
       durationMonths: Number(form.durationMonths),
       lessonMinutes: Number(form.lessonMinutes),
       fee: Number(form.fee),
@@ -117,10 +121,11 @@ const FormBody = ({ course, courses, locked, onClose, onSubmit }) => {
           >
             <input className="input" {...bind('name')} disabled={locked} placeholder="Masalan, Biologiya" autoComplete="off" />
           </Field>
+          <Field label="Fan" required error={errors.subject} hint="Masalan: IELTS va CEFR kurslari uchun Ingliz tili">
+            <input className="input" {...bind('subject')} placeholder="Masalan, Ingliz tili" autoComplete="off" maxLength={300} />
+          </Field>
           <Field label="Daraja">
-            <select className="input" {...bind('level')}>
-              {LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
-            </select>
+            <input className="input" {...bind('level')} placeholder="Masalan: Boshlang‘ich, B2 yoki IELTS 7+" autoComplete="off" maxLength={300} />
           </Field>
           <Field label="Holati">
             <select className="input" {...bind('status')}>

@@ -1,4 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTableSelection } from '../../hooks/useTableSelection.js';
+import { useCourses } from '../courses/coursesStore';
+import { matchesCourse, activeCourseNames } from '../courses/courseMatching';
+import { useMemo, useState } from 'react';
+import { canSeeEmployeeSalary } from '../../../auth/salaryPrivacy';
 import { useLocation } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -35,7 +39,6 @@ import { useSupportTeachers } from './supportStore';
 import {
   GROUP_LIST,
   PAY_TYPES,
-  SUBJECTS,
   SUPPORT_ROLES,
   SUPPORT_ROLE_OPTIONS,
   SUPPORT_STATUSES,
@@ -68,6 +71,9 @@ const matchesQuery = (p, q) => {
 };
 
 const SupportTeachers = () => {
+  const { courses } = useCourses();
+  const courseNames = activeCourseNames(courses);
+
   const receptionView = useLocation().pathname.startsWith('/reception');
   const toast = useToast();
   const { supportTeachers: list, add, update, remove, restore, setStatus } = useSupportTeachers();
@@ -77,7 +83,6 @@ const SupportTeachers = () => {
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [sort, setSort] = useState({ key: 'name', dir: 'asc' });
-  const [selected, setSelected] = useState(() => new Set());
 
   const [form, setForm] = useState({ open: false, person: null });
   const [viewId, setViewId] = useState(null);
@@ -114,7 +119,7 @@ const SupportTeachers = () => {
       (p) =>
         (filters.status === 'all' || p.status === filters.status) &&
         (filters.role === 'all' || p.role === filters.role) &&
-        (filters.subject === 'all' || p.subjects.includes(filters.subject)) &&
+        (filters.subject === 'all' || matchesCourse(p, filters.subject, courses)) &&
         matchesQuery(p, q),
     );
     const sorters = {
@@ -127,24 +132,16 @@ const SupportTeachers = () => {
     };
     const dir = sort.dir === 'asc' ? 1 : -1;
     return [...result].sort((a, b) => sorters[sort.key](a, b) * dir || a.id.localeCompare(b.id));
-  }, [list, query, filters, sort, statsById]);
+  }, [list, query, filters, sort, statsById, courses]);
   const rows = filtered;
 
   const hasFilters = query.trim() !== '' || Object.keys(DEFAULT_FILTERS).some((k) => filters[k] !== DEFAULT_FILTERS[k]);
   const viewPerson = list.find((p) => p.id === viewId) ?? null;
 
-  const pageSelected = rows.length > 0 && rows.every((p) => selected.has(p.id));
-  const pageSome = rows.some((p) => selected.has(p.id));
-  const headCheckbox = useRef(null);
-  useEffect(() => {
-    if (headCheckbox.current) headCheckbox.current.indeterminate = pageSome && !pageSelected;
-  }, [pageSome, pageSelected]);
+  const { selected, setSelected, pageSelected, headCheckbox, toggleOne, togglePage } = useTableSelection(rows);
 
   // ---------- Filtr / saralash ----------
-  const resetView = () => {
-    
-    setSelected(new Set());
-  };
+  const resetView = () => setSelected(new Set());
   const changeQuery = (value) => {
     setQuery(value);
     resetView();
@@ -160,23 +157,7 @@ const SupportTeachers = () => {
   };
   const toggleSort = (key) => {
     setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }));
-    
   };
-
-  // ---------- Tanlash ----------
-  const toggleOne = (id) =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  const togglePage = () =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      rows.forEach((p) => (pageSelected ? next.delete(p.id) : next.add(p.id)));
-      return next;
-    });
 
   // ---------- Amallar ----------
   const handleSubmit = (data) => {
@@ -190,7 +171,6 @@ const SupportTeachers = () => {
       const created = add(payload);
       toast.success(`${teacherName(created)} qo‘shildi (${created.id})`);
       setSort({ key: 'name', dir: 'asc' });
-      
     }
     setForm({ open: false, person: null });
   };
@@ -239,7 +219,7 @@ const SupportTeachers = () => {
         p.id, p.lastName, p.firstName, p.gender === 'female' ? 'Ayol' : 'Erkak', formatDate(p.birthDate),
         formatPhone(p.phone), SUPPORT_ROLES[p.role].label, p.subjects.join(', '), p.groups.join(', '), st.studentCount,
         SUPPORT_STATUSES[p.status].label, PAY_TYPES.find((t) => t.value === p.payType)?.label ?? '',
-        p.payValue, st.pay, formatDate(p.startedAt), p.address,
+        p.payValue, canSeeEmployeeSalary('support', p.id) ? st.pay : '', formatDate(p.startedAt), p.address,
       ];
     });
     downloadCsv('qoshimcha-ustozlar.csv', [header, ...body]);
@@ -283,7 +263,7 @@ const SupportTeachers = () => {
           icon={AlertTriangle}
           tone="warning"
         />
-        {!receptionView && <StatCard title="Oylik to‘lov fondi" value={formatMoney(summary.payFund)} icon={Wallet} tone="danger" />}
+        {!receptionView && canSeeEmployeeSalary('all') && <StatCard title="Oylik to‘lov fondi" value={formatMoney(summary.payFund)} icon={Wallet} tone="danger" />}
       </section>
 
       <Card className="students-card">
@@ -322,7 +302,7 @@ const SupportTeachers = () => {
             </select>
             <select className="input" aria-label="Fan" value={filters.subject} onChange={(e) => changeFilter('subject', e.target.value)}>
               <option value="all">Barcha fanlar</option>
-              {SUBJECTS.map((s) => <option key={s} value={s}>{s}</option>)}
+              {courseNames.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
             {hasFilters && (
               <button type="button" className="btn btn--ghost" onClick={clearFilters}>
@@ -449,7 +429,7 @@ const SupportTeachers = () => {
                       <td className="is-right">{formatNumber(st.studentCount)}</td>
                       <td><span className={`badge badge--dot badge--${status.tone}`}>{status.label}</span></td>
                       <td className="col-xl is-right data-table__muted">
-                        {p.status === 'left' ? '—' : formatSom(st.pay)}
+                        {p.status === 'left' || !canSeeEmployeeSalary('support', p.id) ? '—' : formatSom(st.pay)}
                       </td>
                       <td className="data-table__actions">
                         <RowMenu items={menuItems(p)} label={`${teacherName(p)} uchun amallar`} />
@@ -475,7 +455,7 @@ const SupportTeachers = () => {
       <SupportTeacherDrawer
         person={viewPerson}
         students={students}
-        hideSalary={receptionView}
+        hideSalary={receptionView || !canSeeEmployeeSalary('support', viewPerson?.id)}
         readOnly={receptionView}
         onClose={() => setViewId(null)}
         onEdit={(p) => setForm({ open: true, person: p })}

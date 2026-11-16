@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCollectionState } from '../../../api/memoryStore.js';
+import { useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { AlertTriangle, CalendarDays, CalendarCheck, Clock3, DoorOpen, Layers, MapPin } from 'lucide-react';
 import StatCard from '../../components/StatCard';
@@ -17,6 +18,8 @@ import '../teachers/Teachers.scss';
 import './Schedule.scss';
 import useReceptionPermissions from '../../../Reception/useReceptionPermissions';
 
+import { useCurrentTime } from '../../useCurrentTime';
+
 const todayDay = () => {
   const day = new Date().getDay();
   return day === 0 ? 1 : day;
@@ -27,6 +30,7 @@ const TIME_OPTIONS = Array.from({ length: 25 }, (_, index) => toTime(8 * 60 + in
 const DAY_NAMES = Object.fromEntries(SCHEDULE_DAYS.map((day) => [day.value, day.full]));
 
 const Schedule = () => {
+  const timestamp = useCurrentTime();
   const basePath = useLocation().pathname.startsWith('/reception') ? '/reception' : '/admin';
   const canEdit = useReceptionPermissions()('schedule', 'edit');
   const toast = useToast();
@@ -36,27 +40,20 @@ const Schedule = () => {
   const { courses } = useCourses();
   const [day, setDay] = useState(todayDay);
   const [query, setQuery] = useState('');
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [groupFilter, setGroupFilter] = useState('all');
+  const [roomFilter, setRoomFilter] = useState('all');
   const [duration, setDuration] = useState(90);
   const [selectedDay, setSelectedDay] = useState(todayDay);
   const [selectedTime, setSelectedTime] = useState('09:00');
   const [editCode, setEditCode] = useState(null);
   const [roomNumber, setRoomNumber] = useState('');
-  const [registeredRooms, setRegisteredRooms] = useState(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem('edu-schedule-rooms-v1'));
-      return Array.isArray(saved) ? saved.filter((room) => typeof room === 'string') : [];
-    } catch {
-      return [];
-    }
-  });
-
-  useEffect(() => {
-    try { localStorage.setItem('edu-schedule-rooms-v1', JSON.stringify(registeredRooms)); } catch { /* local storage unavailable */ }
-  }, [registeredRooms]);
+  const [registeredRooms, setRegisteredRooms] = useCollectionState('edu-schedule-rooms-v1');
 
   const activeGroups = useMemo(() => groups.filter((group) => group.status === 'active'), [groups]);
   const rooms = useMemo(() => [...new Set([...groups.map((group) => group.room), ...registeredRooms].filter(Boolean))].sort((a, b) => a.localeCompare(b, 'uz', { numeric: true })), [groups, registeredRooms]);
-  const scheduleTimes = useMemo(() => [...new Set(activeGroups.map((group) => group.start))].sort(), [activeGroups]);
+  const calendarGroups = activeGroups.filter((g) => (groupFilter === 'all' || g.code === groupFilter) && (roomFilter === 'all' || g.room === roomFilter));
+  const scheduleTimes = [...new Map(calendarGroups.map((g) => [JSON.stringify([g.start, g.end]), { start: g.start, end: g.end }])).values()].sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
   const teams = useMemo(() => new Map(groups.map((group) => [group.code, getGroupTeam(group.code, teachers, supportTeachers)])), [groups, teachers, supportTeachers]);
   const colorOf = useMemo(() => {
     const colors = new Map(courses.map((course) => [course.name, course.color]));
@@ -69,9 +66,10 @@ const Schedule = () => {
   const conflicts = useMemo(() => findAllConflicts(rowsByMode), [rowsByMode]);
   const todayLessons = activeGroups.filter((group) => group.days.includes(todayDay())).length;
   const weeklyCount = activeGroups.reduce((count, group) => count + group.days.length, 0);
-  const rangeStart = new Date();
+  const rangeStart = new Date(timestamp);
   rangeStart.setDate(rangeStart.getDate() - ((rangeStart.getDay() + 6) % 7));
   rangeStart.setHours(0, 0, 0, 0);
+  rangeStart.setDate(rangeStart.getDate() + weekOffset * 7);
   const weekDates = SCHEDULE_DAYS.map((weekday) => {
     const date = new Date(rangeStart);
     date.setDate(date.getDate() + weekday.value - 1);
@@ -86,8 +84,8 @@ const Schedule = () => {
   });
   const freeRooms = availableRooms.filter((item) => !item.lesson);
   const q = query.trim().toLocaleLowerCase('uz');
-  const getCellLessons = (weekday, time) => activeGroups
-    .filter((group) => group.days.includes(weekday) && group.start === time)
+  const getCellLessons = (weekday, time) => calendarGroups
+    .filter((group) => group.days.includes(weekday) && group.start === time.start && group.end === time.end)
     .filter((group) => !q || `${group.code} ${group.course} ${group.room} ${teams.get(group.code)?.main?.lastName ?? ''}`.toLocaleLowerCase('uz').includes(q))
     .sort((a, b) => a.code.localeCompare(b.code, 'uz'));
   const editGroup = groups.find((group) => group.code === editCode) ?? null;
@@ -135,6 +133,9 @@ const Schedule = () => {
       <div className="schedule-workspace">
         <Card className="schedule-calendar-card" title="Haftalik darslar" subtitle={`${activeGroups.length} ta faol guruh · sana va vaqt bo‘yicha`}>
           <div className="schedule-toolbar">
+            <div className="schedule-week-nav"><button type="button" className="btn btn--secondary btn--sm" aria-label="Oldingi hafta" onClick={() => setWeekOffset((n) => n - 1)}>‹</button><strong>{weekDates[0].toLocaleDateString('uz-UZ', { day: 'numeric', month: 'short' })} — {weekDates.at(-1).toLocaleDateString('uz-UZ', { day: 'numeric', month: 'short', year: 'numeric' })}</strong><button type="button" className="btn btn--secondary btn--sm" aria-label="Keyingi hafta" onClick={() => setWeekOffset((n) => n + 1)}>›</button><button type="button" className="btn btn--secondary btn--sm" onClick={() => setWeekOffset(0)}>Joriy hafta</button></div>
+            <select className="input schedule-filter" aria-label="Guruh bo‘yicha jadval" value={groupFilter} onChange={(e) => setGroupFilter(e.target.value)}><option value="all">Barcha guruhlar</option>{activeGroups.map((g) => <option key={g.code} value={g.code}>{g.code}</option>)}</select>
+            <select className="input schedule-filter" aria-label="Xona bo‘yicha jadval" value={roomFilter} onChange={(e) => setRoomFilter(e.target.value)}><option value="all">Barcha xonalar</option>{rooms.map((r) => <option key={r} value={r}>{r}</option>)}</select>
             <label className="schedule-search"><CalendarDays size={16}/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Guruh, kurs, xona yoki ustozni qidirish"/></label>
             <div className="schedule-day-pick" aria-label="Ko‘rilayotgan hafta kuni">{SCHEDULE_DAYS.map((weekday) => <button key={weekday.value} type="button" className={day === weekday.value ? 'is-active' : ''} onClick={() => { setDay(weekday.value); setSelectedDay(weekday.value); }}>{weekday.short}</button>)}</div>
           </div>
@@ -142,20 +143,20 @@ const Schedule = () => {
             <div className="schedule-calendar__time-head"><Clock3 size={14}/></div>
             {weekDates.map((date) => {
               const weekday = date.getDay();
-              const count = activeGroups.filter((group) => group.days.includes(weekday)).length;
+              const count = calendarGroups.filter((group) => group.days.includes(weekday)).length;
               return <div className={`schedule-calendar__day${weekday === day ? ' is-selected' : ''}${weekday === todayDay() ? ' is-today' : ''}`} key={weekday} onClick={() => { setDay(weekday); setSelectedDay(weekday); }} role="button" tabIndex={0} onKeyDown={(event) => event.key === 'Enter' && (setDay(weekday), setSelectedDay(weekday))}><span>{DAY_NAMES[weekday]}</span><strong>{String(date.getDate()).padStart(2, '0')}.{String(date.getMonth() + 1).padStart(2, '0')}</strong><small>{count} ta dars</small></div>;
             })}
-            {scheduleTimes.map((time) => <div className="schedule-calendar__row" key={time}>
-              <div className="schedule-calendar__time">{time}</div>
+            {scheduleTimes.map((time) => <div className="schedule-calendar__row" key={JSON.stringify(time)}>
+              <div className="schedule-calendar__time"><strong>{time.start}</strong><span>– {time.end}</span></div>
               {weekDates.map((date) => {
                 const weekday = date.getDay();
                 const lessons = getCellLessons(weekday, time);
-                return <div className={`schedule-calendar__cell${weekday === day ? ' is-selected' : ''}${lessons.length > 1 ? ' has-multiple-lessons' : ''}`} key={`${weekday}-${time}`}>
+                return <div className={`schedule-calendar__cell${weekday === day ? ' is-selected' : ''}${lessons.length > 1 ? ' has-multiple-lessons' : ''}`} key={weekday}>
                   {lessons.length > 1 && <span className="schedule-cell-count">{lessons.length} ta dars</span>}
                   {lessons.map((group) => {
                     const main = teams.get(group.code)?.main;
                     const teacherName = main ? `${main.lastName} ${main.firstName}` : 'Ustoz biriktirilmagan';
-                    const lesson = <><span className="schedule-event__range">{group.start}–{group.end}</span><strong>{group.course}</strong><span className="schedule-event__meta">{group.code}<span aria-hidden="true"> · </span><MapPin size={11}/>{group.room}</span></>;
+                    const lesson = <><span className="schedule-event__range">{group.start}–{group.end}</span><strong>{group.course}</strong><span className="schedule-event__group">{group.code}</span><span className="schedule-event__teacher">{teacherName}</span><span className="schedule-event__meta"><MapPin size={11}/>{group.room}</span></>;
                     return canEdit
                       ? <button type="button" title={`${group.course} · ${group.code} · ${group.room} · ${teacherName}`} className={`schedule-event schedule-event--${colorOf(group.course)}`} key={group.code} onClick={() => setEditCode(group.code)}>{lesson}</button>
                       : <article title={`${group.course} · ${group.code} · ${group.room} · ${teacherName}`} className={`schedule-event schedule-event--${colorOf(group.course)}`} key={group.code}>{lesson}</article>;

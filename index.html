@@ -15,19 +15,10 @@
       rel="stylesheet"
     />
     <!-- Sahifa yuklanishidan oldin mavzuni o‘rnatadi (oq chaqnashni oldini oladi) -->
-    <script>
-      try {
-        // Standart mavzu — qorong‘i; foydalanuvchi tanlovi saqlanadi
-        var t = localStorage.getItem('admin-theme');
-        if (t !== 'light' && t !== 'dark') t = 'dark';
-        document.documentElement.setAttribute('data-theme', t);
-        document.documentElement.style.colorScheme = t;
-        var m = document.querySelector('meta[name="theme-color"]');
-        if (m) m.setAttribute('content', t === 'dark' ? '#0b1424' : '#f5f8fc');
-      } catch (e) {}
-    </script>
+    <script src="/theme-init.js"></script>
   </head>
   <body>
+    <noscript>EduControl Pro ishlashi uchun brauzeringizda JavaScript yoqilgan bo‘lishi kerak.</noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

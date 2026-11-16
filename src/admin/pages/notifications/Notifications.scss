@@ -1,5 +1,16 @@
 @use '../../styles/variables' as *;
 
+.lesson-notifications {
+  display: grid; gap: 14px;
+  &__filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; label { display: grid; gap: 7px; color: var(--text-muted); font-size: 0.8rem; } select { width: 100%; } }
+  &__count { margin: 0; color: var(--text-muted); font-size: 0.8rem; }
+  &__item { padding: 18px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); h3 { margin: 12px 0 7px; font-size: 0.95rem; color: var(--text); } p { color: var(--text-muted); font-size: 0.85rem; } &.is-unread { border-inline-start: 3px solid var(--primary); } }
+  &__meta { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; strong { color: var(--primary); } time { font-size: 0.75rem; color: var(--text-muted); } }
+  &__actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  &__empty { padding: 32px 18px; text-align: center; color: var(--text-muted); border: 1px dashed var(--border); border-radius: 12px; }
+  @media (max-width: 600px) { &__filters { grid-template-columns: 1fr; } &__item { padding: 12px; } }
+}
+
 .ntf-selectall {
   padding: 0.6rem 1.25rem;
   border-bottom: 1px solid var(--border);
@@ -37,8 +48,8 @@
 .ntf-row {
   display: flex;
   align-items: flex-start;
-  gap: 0.85rem;
-  padding: 0.9rem 1.25rem;
+  gap: 0.65rem;
+  padding: 0.75rem 1rem;
   border-bottom: 1px solid var(--border);
   transition: background-color $transition-base;
 
@@ -68,11 +79,11 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-size: 0.95rem;
+    font-size: 0.83rem;
     font-weight: 500;
   }
 
-  &.is-unread &__title { font-weight: 700; }
+  &.is-unread &__title { font-weight: 600; }
 
   &__dot {
     flex-shrink: 0;
@@ -83,7 +94,8 @@
   }
 
   &__msg {
-    font-size: 0.88rem;
+    font-size: 0.78rem;
+    overflow-wrap: anywhere;
     color: var(--text-muted);
   }
 
@@ -93,7 +105,7 @@
     align-items: center;
     gap: 0.5rem;
     margin-top: 0.2rem;
-    font-size: 0.78rem;
+    font-size: 0.7rem;
     color: var(--text-muted);
   }
 

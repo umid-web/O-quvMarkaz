@@ -1,34 +1,37 @@
+import { sessionIdentity } from '../../api/memoryStore.js';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { GraduationCap, LogOut, X } from 'lucide-react';
 import { navSections } from '../navigation';
 import { loadRoles } from '../pages/users-roles/usersStore';
 import { useAppSettings } from '../pages/settings/useAppSettings';
 import { useNotifications } from '../activity/notificationStore';
+import { logoutFromBackend } from '../../api/backend';
 import './Sidebar.scss';
+import { useToast } from './ui/useToast';
+import { hasBackendSession } from '../../api/backend';
 
 const Sidebar = ({ open = false, onClose = () => {} }) => {
+  const toast = useToast();
   const { settings } = useAppSettings();
   const { unread } = useNotifications();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const isTeacher = sessionStorage.getItem('educontrol_role') === 'teacher' || pathname.startsWith('/teacher');
+  const isTeacher = sessionIdentity.getItem('educontrol_role') === 'teacher' || pathname.startsWith('/teacher');
   const basePath = isTeacher ? '/teacher' : '/admin';
-  const role = loadRoles().find((item) => item.id === sessionStorage.getItem('educontrol_role'));
-  const isSalaryAdmin = ['admin', 'owner'].includes(role?.id);
-  const teacherModules = new Set(['', 'students', 'schedule', 'payments']);
+  const role = loadRoles().find((item) => item.id === sessionIdentity.getItem('educontrol_role'));
   const sections = navSections.map((section) => ({
     ...section,
     items: section.items.filter(({ path }) => {
       const module = path || 'dashboard';
-      if (module === 'salaries' && !isSalaryAdmin) return false;
-      if (isTeacher) return teacherModules.has(path) && role?.permissions?.includes(`${module}.view`);
       return role?.permissions?.includes(`${module}.view`);
     }),
   })).filter((section) => section.items.length);
   const orgName = settings?.org?.name?.trim() || 'EduControl Pro';
   const logo = settings?.org?.logo;
-  const logout = () => {
-    ['educontrol_logged_in', 'educontrol_username', 'educontrol_role', 'educontrol_user_id', 'educontrol_teacher_id'].forEach((key) => sessionStorage.removeItem(key));
+  const logout = async () => {
+    try { await logoutFromBackend(); }
+    catch (error) { if (hasBackendSession()) { toast.error(error.message); return; } }
+    ['educontrol_logged_in', 'educontrol_username', 'educontrol_role', 'educontrol_user_id', 'educontrol_teacher_id', 'educontrol_teacher_type'].forEach((key) => sessionIdentity.removeItem(key));
     navigate('/login', { replace: true });
   };
 
@@ -62,7 +65,7 @@ const Sidebar = ({ open = false, onClose = () => {} }) => {
             {section.items.map(({ path, label, icon: Icon }) => (
               <NavLink
                 key={path || 'dashboard'}
-                to={`${basePath}${path ? `/${path}` : ''}`}
+                to={`${basePath}${path ? `/${path === 'activity' ? 'activity-log' : path}` : ''}`}
                 end={path === ''}
                 onClick={onClose}
                 className={({ isActive }) => (isActive ? 'menu-item active' : 'menu-item')}

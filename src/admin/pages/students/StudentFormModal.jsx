@@ -3,8 +3,11 @@ import { CalendarClock, Info } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import { formatDate, formatSom, maskPhoneInput, phoneDigits } from '../../utils/format';
 import { loadTeachers, findTeacherByGroup } from '../teachers/teachersStore';
-import { getCourseFee } from '../courses/coursesStore';
-import { COURSES, GENDERS, STATUS_OPTIONS, formatSchedule, getCourse, getGroup } from './studentsData';
+import { loadCourses } from '../courses/coursesStore';
+import { matchingStudentGroups, normalizeCourseText } from '../courses/courseMatching';
+import { loadGroups } from '../groups/groupsStore';
+import { formatGroupSchedule } from '../groups/groupsData';
+import { GENDERS, STATUS_OPTIONS } from './studentsData';
 import { calcInitialDebt } from './billing';
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -17,10 +20,10 @@ const EMPTY = {
   phone: '',
   parentPhone: '',
   address: '',
-  course: COURSES[0].name,
-  group: COURSES[0].groups[0],
+  course: '',
+  group: '',
   status: 'active',
-  monthlyFee: String(COURSES[0].fee),
+  monthlyFee: '',
   debt: '0',
   enrolledAt: '',
   note: '',
@@ -36,7 +39,7 @@ const toForm = (student) =>
         monthlyFee: String(student.monthlyFee),
         debt: String(student.debt ?? 0),
       }
-    : { ...EMPTY, monthlyFee: String(getCourseFee(EMPTY.course)), enrolledAt: todayIso() };
+    : { ...EMPTY, enrolledAt: todayIso() };
 
 const validate = (f, isEdit) => {
   const e = {};
@@ -49,6 +52,7 @@ const validate = (f, isEdit) => {
   if (f.birthDate && f.birthDate > todayIso()) e.birthDate = 'Tug‘ilgan sana kelajakda bo‘lishi mumkin emas';
   if (!f.enrolledAt) e.enrolledAt = 'Qo‘shilgan sanani kiriting';
   if (!f.group) e.group = 'Guruhni tanlang';
+  if (!f.course.trim()) e.course = 'Fan yoki kurs nomini yozing';
   const fee = Number(f.monthlyFee);
   if (!Number.isFinite(fee) || fee <= 0) e.monthlyFee = 'Oylik to‘lov 0 dan katta bo‘lsin';
   if (isEdit) {
@@ -119,7 +123,16 @@ const FormBody = ({ student, onClose, onSubmit }) => {
   const isEdit = Boolean(student);
   const [form, setForm] = useState(() => toForm(student));
   const [errors, setErrors] = useState({});
-  const teachers = useMemo(loadTeachers, []);
+  const teachers = useMemo(() => loadTeachers(), []);
+  const courses = useMemo(() => loadCourses(), []);
+  const allGroups = useMemo(() => loadGroups(), []);
+  const groups = matchingStudentGroups(form.course, courses, allGroups);
+  if (isEdit && student.group === form.group && normalizeCourseText(student.course) === normalizeCourseText(form.course)
+    && !groups.some((group) => group.code === student.group)) {
+    const existing = allGroups.find((group) => group.code === student.group);
+    if (existing) groups.push(existing);
+  }
+  const selectedGroup = groups.find((group) => group.code === form.group);
 
   const set = (name, value) => {
     setForm((f) => ({ ...f, [name]: value }));
@@ -139,18 +152,28 @@ const FormBody = ({ student, onClose, onSubmit }) => {
 
   // Kurs o‘zgarsa: guruh mos ro‘yxatdan tanlanadi, oylik to‘lov kurs narxiga moslanadi
   const handleCourse = (name) => {
-    const course = getCourse(name);
+    const matching = matchingStudentGroups(name, courses, allGroups);
+    const course = courses.find((item) => normalizeCourseText(item.name) === normalizeCourseText(name));
     setForm((f) => ({
       ...f,
       course: name,
-      group: course.groups.includes(f.group) ? f.group : course.groups[0],
-      monthlyFee: String(getCourseFee(name)),
+      group: matching.some((group) => group.code === f.group) ? f.group : '',
+      monthlyFee: course ? String(course.fee) : f.monthlyFee,
     }));
+    setErrors((previous) => ({ ...previous, course: undefined, group: undefined }));
+  };
+
+  const handleGroup = (code) => {
+    const group = groups.find((item) => item.code === code);
+    const course = courses.find((item) => normalizeCourseText(item.name) === normalizeCourseText(group?.course));
+    setForm((previous) => ({ ...previous, group: code, monthlyFee: course ? String(course.fee) : previous.monthlyFee }));
+    setErrors((previous) => ({ ...previous, group: undefined }));
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     const found = validate(form, isEdit);
+    if (form.group && !selectedGroup) found.group = 'Fan yoki kursga tegishli mavjud guruhni tanlang';
     setErrors(found);
     if (Object.keys(found).length) {
       document.querySelector('.student-form .has-error .input')?.focus();
@@ -165,7 +188,7 @@ const FormBody = ({ student, onClose, onSubmit }) => {
       phone: phoneDigits(form.phone),
       parentPhone: phoneDigits(form.parentPhone),
       address: form.address.trim(),
-      course: form.course,
+      course: selectedGroup.course,
       group: form.group,
       status: form.status,
       monthlyFee: Number(form.monthlyFee),
@@ -184,17 +207,10 @@ const FormBody = ({ student, onClose, onSubmit }) => {
     });
   };
 
-  const groups = getCourse(form.course)?.groups ?? [];
   const groupTeacher = findTeacherByGroup(teachers, form.group);
-  const billing = useMemo(
-    () =>
-      isEdit || !form.enrolledAt
-        ? null
-        : calcInitialDebt({ days: getGroup(form.group)?.days, fee: Number(form.monthlyFee) || 0, enrolledAt: form.enrolledAt }),
-    [isEdit, form.group, form.monthlyFee, form.enrolledAt],
-  );
+  const billing = isEdit || !form.enrolledAt || !selectedGroup ? null : calcInitialDebt({ days: selectedGroup.days, fee: Number(form.monthlyFee) || 0, enrolledAt: form.enrolledAt });
   const groupHint = form.group
-    ? `${groupTeacher ? `Ustoz: ${groupTeacher.lastName} ${groupTeacher.firstName} · ` : 'Ustoz biriktirilmagan · '}${formatSchedule(form.group)}`
+    ? `${groupTeacher ? `Ustoz: ${groupTeacher.lastName} ${groupTeacher.firstName} · ` : 'Ustoz biriktirilmagan · '}${selectedGroup ? formatGroupSchedule(selectedGroup) : ''}`
     : undefined;
 
   return (
@@ -245,14 +261,16 @@ const FormBody = ({ student, onClose, onSubmit }) => {
 
         <fieldset className="student-form__section">
           <legend>O‘quv va to‘lov ma'lumotlari</legend>
-          <Field label="Kurs" required>
-            <select className="input" value={form.course} onChange={(e) => handleCourse(e.target.value)}>
-              {COURSES.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
-            </select>
+          <Field label="Fan yoki kurs" required error={errors.course} hint="Fan yozilsa, shu fanga tegishli kurslarning guruhlari chiqadi">
+            <input className="input" value={form.course} onChange={(e) => handleCourse(e.target.value)} list="student-course-suggestions" placeholder="Masalan: Ingliz tili yoki IELTS" autoComplete="off" maxLength={300} />
+            <datalist id="student-course-suggestions">
+              {[...new Set(courses.filter((course) => course.status !== 'archived').flatMap((course) => [course.name, course.subject]).filter(Boolean))].map((name) => <option key={name} value={name} />)}
+            </datalist>
           </Field>
           <Field label="Guruh" required error={errors.group} hint={groupHint}>
-            <select className="input" {...bind('group')}>
-              {groups.map((g) => <option key={g} value={g}>{g}</option>)}
+            <select className="input" value={form.group} onChange={(event) => handleGroup(event.target.value)}>
+              <option value="">{groups.length ? '— Guruhni tanlang —' : 'Mos guruh topilmadi'}</option>
+              {groups.map((group) => <option key={group.code} value={group.code}>{group.code} · {group.course} · {formatGroupSchedule(group)}</option>)}
             </select>
           </Field>
           <Field label="Holati">

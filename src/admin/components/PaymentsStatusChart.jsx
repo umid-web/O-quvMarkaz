@@ -14,8 +14,8 @@ const PaymentsStatusChart = ({ data = [] }) => (
         nameKey="status"
         cx="50%"
         cy="46%"
-        innerRadius={62}
-        outerRadius={92}
+        innerRadius={66}
+        outerRadius={84}
         paddingAngle={3}
         stroke="var(--surface)"
         strokeWidth={2}

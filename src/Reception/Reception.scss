@@ -91,7 +91,7 @@
 }
 
 .reception-action { display: flex; min-width: 0; min-height: 68px; align-items: center; gap: 12px; padding: 14px 15px; border: 1px solid var(--border, #e3e9f2); border-radius: 11px; background: var(--surface, white); color: var(--text-muted, #5f6f86); text-decoration: none; transition: .18s ease; }
-.reception-action:hover { transform: translateY(-2px); border-color: var(--primary, #1d6fe0); box-shadow: var(--shadow-md, 0 8px 24px #22335212); }
+.reception-action:hover { border-color: color-mix(in srgb, var(--primary) 35%, var(--border)); background: var(--surface-2); }
 .reception-action > span:nth-child(2) { min-width: 0; flex: 1; }
 .reception-action b, .reception-action small { display: block; }
 .reception-action b { color: var(--text, #0f1f38); font-size: 12px; line-height: 1.4; }

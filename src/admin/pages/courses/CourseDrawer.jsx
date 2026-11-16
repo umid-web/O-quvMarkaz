@@ -81,6 +81,7 @@ const CourseDrawer = ({ course, stats, students, teachers, onClose, onEdit, onDe
 
         <section className="profile__section">
           <h4>Kurs shartlari</h4>
+          <Row icon={BookOpen} label="Fan">{course.subject || course.name}</Row>
           <Row icon={Banknote} label="Oylik to‘lov">{formatSom(course.fee)}</Row>
           <Row icon={Clock} label="Davomiyligi">
             {course.durationMonths} oy · bir dars {course.lessonMinutes} daqiqa

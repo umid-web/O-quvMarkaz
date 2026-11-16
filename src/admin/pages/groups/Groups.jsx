@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTableSelection } from '../../hooks/useTableSelection.js';
+import { useMemo, useState } from 'react';
 import {
   AlertTriangle,
   Archive,
@@ -72,7 +73,6 @@ const Groups = () => {
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [sort, setSort] = useState({ key: 'code', dir: 'asc' });
-  const [selected, setSelected] = useState(() => new Set());
 
   const [form, setForm] = useState({ open: false, group: null });
   const [assignCode, setAssignCode] = useState(null);
@@ -143,18 +143,10 @@ const Groups = () => {
   const viewGroup = groups.find((g) => g.code === viewCode) ?? null;
   const assignGroup = groups.find((g) => g.code === assignCode) ?? null;
 
-  const pageSelected = rows.length > 0 && rows.every((g) => selected.has(g.code));
-  const pageSome = rows.some((g) => selected.has(g.code));
-  const headCheckbox = useRef(null);
-  useEffect(() => {
-    if (headCheckbox.current) headCheckbox.current.indeterminate = pageSome && !pageSelected;
-  }, [pageSome, pageSelected]);
+  const { selected, setSelected, pageSelected, headCheckbox, toggleOne, togglePage } = useTableSelection(rows, 'code');
 
   // ---------- Filtr / saralash ----------
-  const resetView = () => {
-    
-    setSelected(new Set());
-  };
+  const resetView = () => setSelected(new Set());
   const changeQuery = (value) => {
     setQuery(value);
     resetView();
@@ -170,23 +162,7 @@ const Groups = () => {
   };
   const toggleSort = (key) => {
     setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }));
-    
   };
-
-  // ---------- Tanlash ----------
-  const toggleOne = (code) =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(code)) next.delete(code);
-      else next.add(code);
-      return next;
-    });
-  const togglePage = () =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      rows.forEach((g) => (pageSelected ? next.delete(g.code) : next.add(g.code)));
-      return next;
-    });
 
   // ---------- Ustoz biriktirish (asosiy yozuv — ustozlar do‘konlarida: `groups` ro‘yxati) ----------
   const applyTeam = (code, mainId, supportIds) => {
@@ -229,7 +205,6 @@ const Groups = () => {
       add(group);
       toast.success(`${group.code} guruhi qo‘shildi`);
       setSort({ key: 'code', dir: 'asc' });
-      
     }
     applyTeam(group.code, mainId, supportIds);
     setForm({ open: false, group: null });

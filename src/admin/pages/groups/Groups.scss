@@ -7,21 +7,21 @@
   display: inline-grid;
   place-items: center;
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
   background: var(--primary-soft);
   color: var(--primary);
-  font-size: 0.68rem;
-  font-weight: 700;
+  font-size: 0.6rem;
+  font-weight: 600;
   letter-spacing: 0.02em;
 }
 
 .profile__hero .group-badge {
-  width: 64px;
-  height: 64px;
-  border-radius: 16px;
-  font-size: 0.95rem;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  font-size: 0.8rem;
 }
 
 .groups-page .data-table td.is-full { color: var(--danger); font-weight: 600; }
@@ -48,14 +48,34 @@
     min-width: 0;
     gap: 0.1rem;
 
-    strong { font-size: 0.88rem; }
-    span { font-size: 0.78rem; color: var(--text-muted); }
+    strong { font-size: 0.8rem; font-weight: 500; overflow-wrap: anywhere; }
+    span { font-size: 0.7rem; color: var(--text-muted); }
   }
 
   &__phone {
-    font-size: 0.78rem;
+    font-size: 0.7rem;
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
+}
+
+.groups-page {
+  .toolbar__filters { gap: 0.5rem; }
+  .group-badge { border: 1px solid color-mix(in srgb, var(--primary) 10%, transparent); }
+  .tag-list { gap: 0.25rem; }
+  .tag { padding: 0.15rem 0.4rem; font-size: 0.65rem; font-weight: 400; border-radius: 5px; }
+  .data-table td.is-full { font-weight: 500; }
+}
+
+#group-form {
+  .chips { gap: 0.35rem; flex-wrap: wrap; }
+  .chip { padding: 0.3rem 0.6rem; font-size: 0.75rem; font-weight: 500; }
+}
+
+@media (max-width: 600px) {
+  .groups-page .toolbar__filters .input { min-width: 0; max-width: 100%; }
+  .team-row { flex-wrap: wrap; padding: 0.55rem 0.6rem; gap: 0.5rem; }
+  .team-row__phone { margin-left: auto; }
+  .profile__hero .group-badge { width: 42px; height: 42px; border-radius: 10px; }
 }

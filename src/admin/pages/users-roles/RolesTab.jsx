@@ -5,6 +5,9 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import { useToast } from '../../components/ui/useToast';
 import { formatNumber } from '../../utils/format';
 import RoleFormModal from './RoleFormModal';
+import useReceptionPermissions from '../../../Reception/useReceptionPermissions';
+import { DEFAULT_EMPLOYEE_PERMISSIONS } from '../../../auth/chatPermissions';
+import { sessionIdentity } from '../../../api/memoryStore';
 import {
   ACTIONS,
   ALL_PERMISSIONS,
@@ -30,8 +33,14 @@ const Check = ({ checked, indeterminate = false, ...props }) => {
 const RolesTab = ({ access }) => {
   const toast = useToast();
   const { roles, users, addRole, updateRole, removeRole, restoreRole, resetRole } = access;
+  const can = useReceptionPermissions();
+  const canCreate = can('users-roles', 'create');
+  const canCreateRole = sessionIdentity.getItem('educontrol_role') === 'owner' && canCreate;
+  const canEdit = can('users-roles', 'edit');
+  const canDelete = can('users-roles', 'delete');
 
-  const [selectedId, setSelectedId] = useState(roles[0]?.id);
+  const [selectedId, setSelectedId] = useState(() => roles.find((role) => !role.locked)?.id ?? roles[0]?.id);
+  const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState(null); // saqlanmagan ruxsatlar (null — o‘zgarish yo‘q)
   const [pendingId, setPendingId] = useState(null); // saqlanmagan o‘zgarish bor paytda tanlangan boshqa rol
   const [form, setForm] = useState({ open: false, role: null });
@@ -70,6 +79,7 @@ const RolesTab = ({ access }) => {
 
   // ---------- Rol tanlash ----------
   const selectRole = (id) => {
+    if (saving) return;
     if (id === role.id) return;
     if (dirty) setPendingId(id);
     else setSelectedId(id);
@@ -81,26 +91,31 @@ const RolesTab = ({ access }) => {
   };
 
   // ---------- Saqlash ----------
-  const save = () => {
-    updateRole(role.id, { permissions: draft });
+  const save = async () => {
+    if (!dirty || saving || locked || !canEdit) return;
+    setSaving(true);
+    try { await updateRole(role.id, { permissions: [...draft] }); }
+    catch (error) { toast.error(error.message); return; }
+    finally { setSaving(false); }
     toast.success(`“${role.name}” roli ruxsatlari saqlandi`);
     setDraft(null);
   };
 
-  const restoreDefaults = () => {
-    resetRole(role.id);
+  const restoreDefaults = async () => {
+    try { await resetRole(role.id); }
+    catch (error) { toast.error(error.message); return; }
     setDraft(null);
     toast.success(`“${role.name}” roli ruxsatlari boshlang‘ich holatga qaytarildi`);
   };
 
   // ---------- Rol yaratish / tahrirlash / nusxalash / o‘chirish ----------
-  const handleRoleSubmit = ({ name, description, tone, copyFrom }) => {
+  const handleRoleSubmit = async ({ name, description, tone, copyFrom }) => {
     if (form.role) {
-      updateRole(form.role.id, form.role.system ? { description, tone } : { name, description, tone });
+      await updateRole(form.role.id, form.role.system ? { description, tone } : { name, description, tone });
       toast.success(`“${name}” roli yangilandi`);
     } else {
       const source = roles.find((r) => r.id === copyFrom);
-      const created = addRole({ name, description, tone, permissions: source ? [...source.permissions] : [] });
+      const created = await addRole({ name, description, tone, permissions: source ? [...source.permissions] : [...DEFAULT_EMPLOYEE_PERMISSIONS] });
       setDraft(null);
       setSelectedId(created.id);
       toast.success(
@@ -112,13 +127,14 @@ const RolesTab = ({ access }) => {
     setForm({ open: false, role: null });
   };
 
-  const duplicate = () => {
-    const created = addRole({
+  const duplicate = async () => {
+    let created;
+    try { created = await addRole({
       name: `${role.name} (nusxa)`,
       description: role.description,
       tone: role.tone,
       permissions: [...perms],
-    });
+    }); } catch (error) { toast.error(error.message); return; }
     setDraft(null);
     setSelectedId(created.id);
     toast.success(`“${created.name}” roli yaratildi`);
@@ -133,12 +149,14 @@ const RolesTab = ({ access }) => {
     setToDelete(role);
   };
 
-  const confirmDelete = () => {
-    const removed = removeRole(toDelete.id);
+  const confirmDelete = async () => {
+    let removed;
+    try { removed = await removeRole(toDelete.id); }
+    catch (error) { toast.error(error.message); return; }
     setToDelete(null);
     setDraft(null);
     setSelectedId(roles.find((r) => r.id !== toDelete.id)?.id);
-    toast.info(`“${removed.name}” roli o‘chirildi`, { action: { label: 'Qaytarish', onClick: () => restoreRole(removed) } });
+    toast.info(`“${removed.name}” roli o‘chirildi`, { action: { label: 'Qaytarish', onClick: () => restoreRole(removed).catch((error) => toast.error(error.message)) } });
   };
 
   const usersOfRole = userCounts.get(role.id) ?? 0;
@@ -147,9 +165,9 @@ const RolesTab = ({ access }) => {
     <div className="roles-layout">
       {/* ---------- Rollar ro‘yxati ---------- */}
       <aside className="role-list" aria-label="Rollar">
-        <button type="button" className="btn btn--primary role-list__add" onClick={() => setForm({ open: true, role: null })}>
+        {canCreateRole && <button type="button" className="btn btn--primary role-list__add" onClick={() => setForm({ open: true, role: null })}>
           <Plus size={16} /> Yangi rol
-        </button>
+        </button>}
         <ul>
           {roles.map((r) => {
             const count = userCounts.get(r.id) ?? 0;
@@ -187,19 +205,22 @@ const RolesTab = ({ access }) => {
           subtitle={`${role.description || 'Tavsif kiritilmagan'} · ${formatNumber(usersOfRole)} ta foydalanuvchi`}
           actions={
             <div className="role-editor__actions">
-              <button type="button" className="btn btn--secondary btn--sm" onClick={duplicate}>
+              {dirty && <button type="button" className="btn btn--primary btn--sm" disabled={saving || !canEdit} onClick={save}>
+                <Save size={14} /> {saving ? 'Saqlanmoqda…' : 'Ruxsatlarni saqlash'}
+              </button>}
+              {canCreateRole && <button type="button" className="btn btn--secondary btn--sm" onClick={duplicate}>
                 <Copy size={14} /> Nusxa olish
-              </button>
-              <button type="button" className="btn btn--secondary btn--sm" onClick={() => setForm({ open: true, role })}>
+              </button>}
+              <button type="button" className="btn btn--secondary btn--sm" disabled={!canEdit} onClick={() => setForm({ open: true, role })}>
                 <Pencil size={14} /> Tahrirlash
               </button>
               {canReset && (
-                <button type="button" className="btn btn--secondary btn--sm" onClick={restoreDefaults}>
+                <button type="button" className="btn btn--secondary btn--sm" disabled={!canEdit} onClick={restoreDefaults}>
                   <RotateCcw size={14} /> Asl holatga
                 </button>
               )}
               {!role.system && (
-                <button type="button" className="btn btn--secondary btn--sm role-editor__delete" onClick={askDelete}>
+                <button type="button" className="btn btn--secondary btn--sm role-editor__delete" disabled={!canDelete} onClick={askDelete}>
                   <Trash2 size={14} /> O‘chirish
                 </button>
               )}
@@ -226,7 +247,7 @@ const RolesTab = ({ access }) => {
                           <Check
                             checked={st.all}
                             indeterminate={st.some}
-                            disabled={locked}
+                            disabled={locked || !canEdit || saving}
                             onChange={() => change(setActionPermissions(current(), a.key, !st.all))}
                             aria-label={`Barcha bo‘limlar: ${a.label}`}
                           />
@@ -258,7 +279,7 @@ const RolesTab = ({ access }) => {
                               {m.actions.includes(a.key) ? (
                                 <Check
                                   checked={perms.has(permKey(m.key, a.key))}
-                                  disabled={locked}
+                                  disabled={locked || !canEdit || saving}
                                   onChange={() => change(togglePermission(current(), m.key, a.key))}
                                   aria-label={`${m.label}: ${a.label}`}
                                 />
@@ -271,7 +292,7 @@ const RolesTab = ({ access }) => {
                             <Check
                               checked={st.all}
                               indeterminate={st.some}
-                              disabled={locked}
+                              disabled={locked || !canEdit || saving}
                               onChange={() => change(setModulePermissions(current(), m.key, !st.all))}
                               aria-label={`${m.label}: barcha ruxsatlar`}
                             />
@@ -295,9 +316,9 @@ const RolesTab = ({ access }) => {
           <div className="role-savebar" role="status">
             <span>Saqlanmagan o‘zgarishlar bor</span>
             <div className="role-savebar__actions">
-              <button type="button" className="btn btn--secondary btn--sm" onClick={() => setDraft(null)}>Bekor qilish</button>
-              <button type="button" className="btn btn--primary btn--sm" onClick={save}>
-                <Save size={14} /> Saqlash
+              <button type="button" className="btn btn--secondary btn--sm" disabled={saving} onClick={() => setDraft(null)}>Bekor qilish</button>
+              <button type="button" className="btn btn--primary btn--sm" disabled={saving || !canEdit} onClick={save}>
+                <Save size={14} /> {saving ? 'Saqlanmoqda…' : 'Saqlash'}
               </button>
             </div>
           </div>

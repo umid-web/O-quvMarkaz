@@ -13,7 +13,7 @@
     justify-content: space-between;
     gap: 1rem;
 
-    h1 { margin: 0.2rem 0 0.4rem; font-size: clamp(1.45rem, 2vw, 1.9rem); letter-spacing: -0.035em; }
+    h1 { margin: 0.2rem 0 0.4rem; font-size: clamp(1.3rem, 2vw, 1.65rem); font-weight: 600; letter-spacing: -0.025em; }
     p { margin: 0; color: var(--text-muted); }
   }
 }
@@ -45,7 +45,7 @@
 .teacher-welcome {
   position: relative;
   display: flex;
-  min-height: 250px;
+  min-height: 210px;
   align-items: center;
   justify-content: space-between;
   overflow: hidden;
@@ -53,7 +53,7 @@
   border: 1px solid rgba(114, 168, 255, 0.22);
   border-radius: 1.2rem;
   background: radial-gradient(ellipse at 84% 34%, color-mix(in srgb, var(--primary) 30%, transparent), transparent 34%), linear-gradient(115deg, color-mix(in srgb, var(--primary) 7%, var(--surface)) 4%, var(--surface) 55%, color-mix(in srgb, var(--primary) 15%, var(--surface)) 100%);
-  box-shadow: 0 14px 40px rgba(21, 43, 82, 0.1);
+  box-shadow: none;
 
   &__copy { position: relative; z-index: 1; max-width: 590px; }
   h1 { margin: 0.55rem 0; font-size: clamp(1.65rem, 3vw, 2.35rem); letter-spacing: -0.045em; }
@@ -67,12 +67,12 @@
     padding: 0.72rem 0.95rem;
     border-radius: 0.7rem;
     background: var(--primary);
-    color: #fff;
+    color: var(--on-primary);
     font-size: 0.86rem;
-    font-weight: 700;
+    font-weight: 500;
     text-decoration: none;
     transition: transform 0.18s ease, box-shadow 0.18s ease;
-    &:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(37, 99, 235, 0.25); }
+    &:hover { background: var(--primary-hover); }
   }
 
   &__subjects { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin-top: 0.9rem; span { padding: 0.35rem 0.62rem; border: 1px solid var(--border); border-radius: 999px; background: color-mix(in srgb, var(--surface) 75%, transparent); color: var(--text-muted); font-size: 0.7rem; font-weight: 650; } .teacher-welcome__status { display: inline-flex; align-items: center; gap: 0.35rem; border-color: color-mix(in srgb, var(--success) 20%, transparent); background: color-mix(in srgb, var(--success) 9%, var(--surface)); color: var(--success); i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 13%, transparent); } } }
@@ -88,8 +88,8 @@
 .teacher-welcome__actions { display: flex; flex: 0 0 auto; align-items: center; gap: 0.65rem; .teacher-page__date { background: var(--surface); } .teacher-welcome__button { margin: 0; white-space: nowrap; } }
 
 .teacher-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
-.teacher-stats > .stat-card { min-width: 0; padding: 1.1rem; border: 1px solid var(--border); border-radius: 1rem; background: var(--surface); }
-.teacher-dashboard .teacher-stats > .stat-card { position: relative; overflow: hidden; transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease; &:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--primary) 35%, var(--border)); box-shadow: 0 10px 24px rgba(24, 46, 84, 0.08); } }
+.teacher-stats > .stat-card { min-width: 0; padding: 0.85rem 1rem; border: 1px solid var(--border); border-radius: 11px; background: var(--surface); }
+.teacher-dashboard .teacher-stats > .stat-card { position: relative; overflow: hidden; transition: border-color 0.18s ease; &:hover { border-color: color-mix(in srgb, var(--primary) 35%, var(--border)); } }
 .teacher-dashboard__grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(290px, 0.8fr); align-items: stretch; gap: 1rem; }
 .teacher-card { height: 100%; overflow: hidden; border: 1px solid var(--border); border-radius: 1rem; box-shadow: 0 4px 16px rgba(16, 35, 68, 0.035); }
 .teacher-dashboard .card__header { padding-bottom: 0.85rem; }
@@ -147,7 +147,46 @@
 .teacher-calendar__row { display: contents; }
 .teacher-calendar__time { position: sticky; left: 0; z-index: 2; display: flex; justify-content: center; padding-top: 0.85rem; border-bottom: 1px solid var(--border); background: var(--surface); color: var(--text-muted); font-size: 0.74rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .teacher-calendar__cell { display: flex; min-height: 142px; flex-direction: column; gap: 0.5rem; padding: 0.55rem; border-left: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--surface); &.is-today { background: color-mix(in srgb, var(--primary) 3%, var(--surface)); } }
-.teacher-event { display: flex; min-height: 115px; flex-direction: column; align-items: flex-start; gap: 0.3rem; padding: 0.65rem 0.68rem; overflow: hidden; border: 1px solid var(--event-line, #cfe0ff); border-left: 3px solid var(--event-accent, #4285f4); border-radius: 0.65rem; background: var(--event-bg, #f0f5ff); color: var(--text); box-shadow: 0 2px 5px rgba(29, 51, 86, 0.045); &__time { color: var(--event-accent, #4285f4); font-size: 0.68rem; font-weight: 800; font-variant-numeric: tabular-nums; } strong { max-width: 100%; overflow: hidden; font-size: 0.79rem; line-height: 1.3; text-overflow: ellipsis; } &__group { color: var(--text-muted); font-size: 0.67rem; font-weight: 700; } &__meta { display: flex; align-items: center; gap: 0.25rem; margin-top: auto; color: var(--text-muted); font-size: 0.67rem; } &__teacher { max-width: 100%; overflow: hidden; color: var(--text-muted); font-size: 0.67rem; text-overflow: ellipsis; white-space: nowrap; } &--mint { --event-bg: #effaf5; --event-line: #c9edda; --event-accent: #25a56a; } &--amber { --event-bg: #fff8ed; --event-line: #f5dfbb; --event-accent: #d98a20; } &--violet { --event-bg: #f5f1ff; --event-line: #ded3ff; --event-accent: #8059df; } &--rose { --event-bg: #fff1f1; --event-line: #f3d0d0; --event-accent: #d75555; } }
+.teacher-event {
+  --event-accent: var(--primary);
+  display: flex;
+  min-height: 110px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+  padding: 0.6rem 0.68rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--event-accent) 30%, var(--border));
+  border-left: 3px solid var(--event-accent);
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--event-accent) 10%, var(--surface));
+  color: var(--text);
+  box-shadow: 0 2px 6px rgba(16, 35, 68, 0.06);
+
+  &__time { color: var(--event-accent); font-size: 0.7rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+  strong { max-width: 100%; overflow: hidden; color: var(--text); font-size: 0.8rem; line-height: 1.35; text-overflow: ellipsis; }
+  &__group { color: var(--text); font-size: 0.68rem; font-weight: 650; }
+  &__meta { display: flex; align-items: center; gap: 0.25rem; margin-top: auto; color: var(--text-muted); font-size: 0.67rem; }
+  &__teacher { max-width: 100%; overflow: hidden; color: var(--text-muted); font-size: 0.67rem; text-overflow: ellipsis; white-space: nowrap; }
+  &--mint { --event-accent: var(--success); }
+  &--amber { --event-accent: var(--warning); }
+  &--violet { --event-accent: #8b6de0; }
+  &--rose { --event-accent: var(--danger); }
+}
+
+.teacher-schedule {
+  gap: 0.9rem;
+
+  .teacher-page__heading {
+    align-items: center;
+    gap: 0.65rem;
+    h1 { margin: 0.15rem 0 0.3rem; font-size: clamp(1.15rem, 1.5vw, 1.4rem); }
+    p { font-size: 0.8rem; line-height: 1.45; }
+  }
+  .teacher-eyebrow { font-size: 0.6rem; letter-spacing: 0.1em; }
+  .teacher-page__date { padding: 0.45rem 0.65rem; border-radius: 0.65rem; font-size: 0.76rem; }
+}
+
 
 @media (max-width: 900px) {
   .teacher-dashboard__grid { grid-template-columns: 1fr; }

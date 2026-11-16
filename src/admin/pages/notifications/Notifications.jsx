@@ -27,11 +27,14 @@ import {
   removeNotifications,
   restoreNotifications,
   useNotifications,
+  notificationPath,
 } from '../../activity/notificationStore';
 import { groupByDay, timeAgo, todayKey, toDayKey, formatStamp } from '../../activity/time';
 import { formatNumber } from '../../utils/format';
 import '../../activity/pageKit.scss';
 import './Notifications.scss';
+import LessonNotifications from './LessonNotifications';
+import { isLessonNotification } from './lessonNotification';
 
 const TABS = [
   { value: 'all', label: 'Barchasi' },
@@ -50,6 +53,7 @@ const Notifications = () => {
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(() => new Set());
   const [confirmClear, setConfirmClear] = useState(false);
+  const [lessonWindow, setLessonWindow] = useState(false);
 
   const today = todayKey();
   const stats = useMemo(
@@ -119,8 +123,9 @@ const Notifications = () => {
 
   // ---------- Amallar ----------
   const open = (n) => {
+    if (isLessonNotification(n)) { setLessonWindow(true); return; }
     markRead(n.id);
-    if (n.link) navigate(n.link);
+    if (n.link) navigate(notificationPath(n.link));
   };
 
   const remove = (ids) => {
@@ -158,12 +163,14 @@ const Notifications = () => {
 
   return (
     <div className="pk-page ntf-page">
+      <LessonNotifications open={lessonWindow} onClose={() => setLessonWindow(false)} items={items} />
       <header className="pk-head">
         <div>
           <h1>Bildirishnomalar</h1>
           <p>To‘lov, davomat va tizim xabarlari — muhimlari birinchi navbatda ko‘rinadi</p>
         </div>
         <div className="pk-head__actions">
+          <button type="button" className="btn btn--secondary" onClick={() => setLessonWindow(true)}><CalendarCheck size={16} /> Dars va davomat</button>
           <Link to="/admin/settings" className="btn btn--secondary">
             <Settings size={16} /> Sozlamalar
           </Link>

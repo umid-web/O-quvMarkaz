@@ -37,12 +37,12 @@
   align-items: center;
   gap: 0.5rem;
   margin-bottom: -1px;
-  padding: 0.7rem 1rem;
+  padding: 0.55rem 0.8rem;
   border: 0;
   border-bottom: 2px solid transparent;
   background: transparent;
   color: var(--text-muted);
-  font-size: 0.92rem;
+  font-size: 0.8rem;
   font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
@@ -134,7 +134,7 @@
 /* ============ Rollar: ro‘yxat + ruxsatlar jadvali ============ */
 .roles-layout {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: 240px minmax(0, 1fr);
   align-items: start;
   gap: $spacing-md;
 
@@ -170,7 +170,7 @@
   gap: 0.45rem;
   width: 100%;
   min-width: 200px;
-  padding: 0.75rem 0.9rem;
+  padding: 0.65rem 0.75rem;
   border: 1px solid var(--border);
   border-radius: $radius-md;
   background: var(--surface);
@@ -184,7 +184,7 @@
   &.is-active {
     border-color: var(--primary);
     background: var(--primary-soft);
-    box-shadow: 0 0 0 3px var(--primary-soft);
+    box-shadow: none;
   }
 
   &__top {
@@ -328,5 +328,19 @@
   font-size: 0.9rem;
   font-weight: 500;
 
-  &__actions { display: flex; gap: 0.5rem; }
+  &__actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+}
+
+.role-item strong { font-size: 0.82rem; font-weight: 600; }
+.role-item__meta { font-size: 0.7rem; }
+.role-item__system { font-size: 0.63rem; }
+.role-note { align-items: flex-start; font-size: 0.76rem; }
+.role-note > svg { flex-shrink: 0; }
+.perm-matrix { font-size: 0.8rem; }
+.perm-legend { padding: 0.75rem 1rem; font-size: 0.75rem; }
+.access-list li { flex-wrap: wrap; gap: 0.3rem 0.75rem; font-size: 0.78rem; }
+@media (max-width: 600px) {
+  .role-item { min-width: 170px; }
+  .role-savebar { bottom: 0.5rem; padding: 0.7rem; font-size: 0.78rem; }
+  .role-editor__actions { justify-content: flex-start; }
 }

@@ -1,20 +1,20 @@
+import { memoryCache, sessionIdentity } from '../../api/memoryStore.js';
 import { useSyncExternalStore } from 'react';
 import { formatNumber, formatPhone } from '../utils/format';
 import { pushNotification } from './notificationStore';
+import { hasBackendSession } from '../../api/backend';
 
-// DEMO: faoliyat tarixi brauzerda (localStorage) saqlanadi. Backend ulanganda faqat shu fayldagi
-// logActivity() va o‘qish funksiyalari API so‘rovlariga almashtiriladi (audit log serverda yoziladi).
-//
-// Yozuv: { id, at, actor, module, action, title, entityId, entityName, changes, items, severity, meta }
-//  - changes: [{ field, label, from, to }] — tahrirlashda nima nimaga o‘zgargani
-//  - items:   [{ id, name }] — ommaviy amallarda (masalan, 5 ta talaba o‘chirildi) ta’sirlangan yozuvlar
-//  - severity: info | success | warning | danger
+// Server-backed data is held only in the tab-local React store.
 
 const KEY = 'edu-activity-v1';
 const MAX = 1000;
 
 // Hozircha tizimda login yo‘q — keyinchalik haqiqiy foydalanuvchi bilan almashtiriladi.
-export const getActor = () => ({ id: 'U-ADMIN', name: 'Administrator', role: 'Admin' });
+export const getActor = () => ({
+  id: sessionIdentity.getItem('educontrol_user_id') || 'U-ADMIN',
+  name: sessionIdentity.getItem('educontrol_username') || 'Administrator',
+  role: sessionIdentity.getItem('educontrol_role') || 'admin',
+});
 
 /* ====================== Maydonlarni o‘qiladigan ko‘rinishga keltirish ====================== */
 
@@ -36,7 +36,7 @@ const FIELD_LABELS = {
 
 const STATUS_LABELS = {
   active: 'Faol', frozen: 'Muzlatilgan', graduated: 'Bitirgan', dropped: 'Chiqib ketgan',
-  vacation: 'Ta‘tilda', left: 'Ketgan', archived: 'Arxivda', invited: 'Taklif yuborilgan', blocked: 'Bloklangan',
+  vacation: 'Ta‘tilda', left: 'Ketgan', archived: 'Arxivda', blocked: 'Bloklangan',
 };
 
 const GENDER_LABELS = { male: 'O‘g‘il bola', female: 'Qiz bola' };
@@ -80,79 +80,40 @@ export const diffObjects = (before, patch, { ignore = [], labels = {} } = {}) =>
 const uid = () => `A-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
 // Birinchi ochilishda sahifa bo‘sh ko‘rinmasligi uchun DEMO yozuvlar (backend ulanganda olib tashlanadi)
-const demoSeed = () => {
-  const now = Date.now();
-  const ago = (min) => new Date(now - min * 60_000).toISOString();
-  const actor = getActor();
-  const rows = [
-    [18, 'students', 'create', 'Talaba qo‘shildi: Rahimov Jasur', 'ST-0065', 'Rahimov Jasur', 'success'],
-    [44, 'payments', 'payment', 'To‘lov qabul qilindi: Karimova Madina — 450 000 so‘m', 'PAY-1', 'Karimova Madina', 'success'],
-    [130, 'groups', 'update', 'Guruh tahrirlandi: MAT-A', 'MAT-A', 'MAT-A', 'info',
-      [{ field: 'capacity', label: 'Sig‘im', from: '14', to: '16' }]],
-    [60 * 5, 'attendance', 'save', 'MAT-A · davomat saqlandi (12/14)', 'MAT-A', 'MAT-A', 'info'],
-    [60 * 7, 'students', 'status', 'Talaba holati o‘zgartirildi: Muzlatilgan', 'ST-0012', 'Yusupova Nodira', 'warning',
-      [{ field: 'status', label: 'Holati', from: 'Faol', to: 'Muzlatilgan' }]],
-    [60 * 26, 'users', 'security', 'Foydalanuvchi bloklandi: Qodirov Sherzod', 'U-0004', 'Qodirov Sherzod', 'danger',
-      [{ field: 'status', label: 'Holati', from: 'Faol', to: 'Bloklangan' }]],
-    [60 * 29, 'expenses', 'create', 'Xarajat qo‘shildi: Elektr va internet — 2 350 000 so‘m', 'EXP-1', 'Elektr va internet', 'success'],
-    [60 * 31, 'teachers', 'update', 'Ustoz ma’lumotlari tahrirlandi: Karimov Rustam', 'T-0001', 'Karimov Rustam', 'info',
-      [{ field: 'salaryValue', label: 'Maosh', from: '40', to: '42' }]],
-    [60 * 50, 'students', 'delete', 'Talaba o‘chirildi: Sobirov Doston', 'ST-0031', 'Sobirov Doston', 'danger'],
-    [60 * 52, 'settings', 'save', 'Sozlamalar saqlandi', '', '', 'info',
-      [{ field: 'notifications.telegram', label: 'Bildirishnomalar: Telegram', from: 'Yo‘q', to: 'Ha' }]],
-    [60 * 74, 'courses', 'update', 'Kurs tahrirlandi: Ingliz tili', 'C-0003', 'Ingliz tili', 'info',
-      [{ field: 'fee', label: 'Narx', from: '550 000 so‘m', to: '600 000 so‘m' }]],
-    [60 * 98, 'system', 'export', 'Eksport: talabalar.csv', '', 'talabalar.csv', 'info'],
-  ];
-  return rows.map(([min, module, action, title, entityId, entityName, severity, changes = []], i) => ({
-    id: `A-demo-${i + 1}`,
-    at: ago(min),
-    actor,
-    module,
-    action,
-    title,
-    entityId,
-    entityName,
-    changes,
-    items: [],
-    severity,
-    meta: null,
-    demo: true,
-  }));
-};
-
 const read = () => {
   try {
-    const raw = localStorage.getItem(KEY);
-    if (raw === null) return demoSeed();
+    const raw = memoryCache.getItem(KEY);
+    if (raw === null) return [];
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) return parsed;
   } catch {
     /* buzilgan ma'lumot */
   }
-  return demoSeed();
+  return [];
 };
 
 let state = read();
 const listeners = new Set();
 
 const commit = (next) => {
-  state = next;
+  const encoded = JSON.stringify(next);
   try {
-    localStorage.setItem(KEY, JSON.stringify(state));
+    memoryCache.setItem(KEY, encoded);
   } catch {
-    /* kvota yoki private rejim */
+    // Permissions and failed sync can reject auxiliary writes without publishing.
   }
+  state = read();
   listeners.forEach((l) => l());
+  return memoryCache.getItem(KEY) === encoded;
 };
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('storage', (e) => {
+  window.addEventListener('educontrol:collection', (e) => {
     if (e.key !== KEY) return;
     state = read();
     listeners.forEach((l) => l());
   });
-  if (localStorage.getItem(KEY) === null) commit(state);
+
 }
 
 const subscribe = (listener) => {
@@ -194,15 +155,16 @@ export const logActivity = ({
     severity,
     meta,
   };
-  commit([entry, ...state].slice(0, MAX));
-  if (notify) pushNotification({ ...notify, activityId: entry.id });
+  if (!commit([entry, ...state].slice(0, MAX))) return null;
+  if (notify) pushNotification({ module, entityId: entry.entityId, ...notify, activityId: entry.id });
   return entry;
 };
 
 /** Tarixni tozalaydi va bu haqda bitta yozuv qoldiradi (audit uchun). */
 export const clearActivities = () => {
+  if (hasBackendSession() && !['owner', 'admin'].includes(sessionIdentity.getItem('educontrol_role'))) return;
   const count = state.length;
-  commit([]);
+  if (!commit([])) return;
   logActivity({
     module: 'system',
     action: 'system',

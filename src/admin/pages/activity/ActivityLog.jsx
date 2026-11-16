@@ -1,4 +1,6 @@
-import { useMemo, useState } from 'react';
+import { sessionIdentity } from '../../../api/memoryStore.js';
+import { useEffect, useMemo, useState } from 'react';
+import { hasBackendSession, syncActivityBackend } from '../../../api/backend';
 import { Link } from 'react-router-dom';
 import {
   ArrowDown,
@@ -50,6 +52,14 @@ const SEVERITY_TONE = { info: 'info', success: 'success', warning: 'warning', da
 const ActivityLog = () => {
   const toast = useToast();
   const all = useActivities();
+  const canClear = ['owner', 'admin'].includes(sessionIdentity.getItem('educontrol_role'));
+  useEffect(() => {
+    const refresh = () => { if (hasBackendSession() && !document.hidden) syncActivityBackend().catch(() => {}); };
+    refresh();
+    const timer = setInterval(refresh, 15_000);
+    window.addEventListener('focus', refresh);
+    return () => { clearInterval(timer); window.removeEventListener('focus', refresh); };
+  }, []);
 
   const [query, setQuery] = useState('');
   const [moduleKey, setModuleKey] = useState('all');
@@ -152,6 +162,7 @@ const ActivityLog = () => {
   };
 
   const doClear = () => {
+    if (!canClear) return;
     clearActivities();
     setConfirmClear(false);
     setViewId(null);
@@ -164,15 +175,15 @@ const ActivityLog = () => {
       <header className="pk-head">
         <div>
           <h1>Faoliyat tarixi</h1>
-          <p>Tizimda kim, nima va qachon qilgani — barcha o‘zgarishlar izi (audit)</p>
+          <p>{canClear ? 'Tizimdagi barcha foydalanuvchilarning faoliyat tarixi' : 'O‘zingizga tegishli amallar va o‘zgarishlar tarixi'}</p>
         </div>
         <div className="pk-head__actions">
           <button type="button" className="btn btn--secondary" onClick={exportCsv} disabled={filtered.length === 0}>
             <Download size={16} /> Eksport
           </button>
-          <button type="button" className="btn btn--secondary" onClick={() => setConfirmClear(true)} disabled={all.length === 0}>
+          {canClear && <button type="button" className="btn btn--secondary" onClick={() => setConfirmClear(true)} disabled={all.length === 0}>
             <Trash2 size={16} /> Tarixni tozalash
-          </button>
+          </button>}
         </div>
       </header>
 

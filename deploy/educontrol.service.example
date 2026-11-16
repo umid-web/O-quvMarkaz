@@ -1,0 +1,33 @@
+[Unit]
+Description=EduControl API
+After=network.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=educontrol
+Group=educontrol
+WorkingDirectory=/srv/educontrol
+Environment=NODE_ENV=production
+Environment=API_HOST=127.0.0.1
+Environment=API_PORT=3001
+Environment=SQLITE_FILE=/var/lib/educontrol/educontrol.sqlite
+EnvironmentFile=/etc/educontrol/api.env
+ExecStart=/usr/bin/node /srv/educontrol/Back-end/index.js
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=40s
+KillSignal=SIGTERM
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+StateDirectory=educontrol
+ReadWritePaths=/var/lib/educontrol
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

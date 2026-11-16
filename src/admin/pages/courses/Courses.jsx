@@ -33,13 +33,6 @@ import { COURSE_STATUS_OPTIONS, COURSE_STATUSES, getCourseStats } from './course
 import '../students/Students.scss';
 import './Courses.scss';
 
-const SORTS = [
-  { value: 'name', label: 'Nomi bo‘yicha' },
-  { value: 'students', label: 'Talabalar soni' },
-  { value: 'revenue', label: 'Oylik tushum' },
-  { value: 'fee', label: 'Narxi' },
-];
-
 const Courses = () => {
   const can = useReceptionPermissions();
   const canCreate = can('courses', 'create');
@@ -54,7 +47,6 @@ const Courses = () => {
 
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
-  const [sortKey, setSortKey] = useState('name');
 
   const [form, setForm] = useState({ open: false, course: null });
   const [viewId, setViewId] = useState(null);
@@ -88,16 +80,10 @@ const Courses = () => {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = courses.filter(
-      (c) => (status === 'all' || c.status === status) && (!q || `${c.name} ${c.level} ${c.id}`.toLowerCase().includes(q)),
+      (c) => (status === 'all' || c.status === status) && (!q || `${c.name} ${c.subject || ''} ${c.level} ${c.id}`.toLowerCase().includes(q)),
     );
-    const sorters = {
-      name: (a, b) => a.name.localeCompare(b.name, 'uz'),
-      students: (a, b) => statsById.get(b.id).activeStudents - statsById.get(a.id).activeStudents,
-      revenue: (a, b) => statsById.get(b.id).revenue - statsById.get(a.id).revenue,
-      fee: (a, b) => b.fee - a.fee,
-    };
-    return [...list].sort((a, b) => sorters[sortKey](a, b) || a.id.localeCompare(b.id));
-  }, [courses, query, status, sortKey, statsById]);
+    return [...list].sort((a, b) => a.name.localeCompare(b.name, 'uz') || a.id.localeCompare(b.id));
+  }, [courses, query, status]);
 
   const viewCourse = courses.find((c) => c.id === viewId) ?? null;
   const hasFilters = query.trim() !== '' || status !== 'all';
@@ -208,9 +194,7 @@ const Courses = () => {
               onChange={(e) => setQuery(e.target.value)}
             />
           </div>
-          <select className="input" aria-label="Saralash" value={sortKey} onChange={(e) => setSortKey(e.target.value)}>
-            {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-          </select>
+
           {hasFilters && (
             <button type="button" className="btn btn--ghost" onClick={clearFilters}>
               <X size={15} /> Tozalash
@@ -261,6 +245,7 @@ const Courses = () => {
                   <RowMenu items={menuItems(c)} label={`${c.name} uchun amallar`} />
                 </header>
 
+                <p className="course-card__desc">Fan: {c.subject || c.name}</p>
                 <p className="course-card__desc">{c.description || 'Tavsif kiritilmagan'}</p>
 
                 <div className="course-card__meta">

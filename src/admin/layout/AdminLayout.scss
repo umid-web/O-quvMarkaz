@@ -20,7 +20,7 @@
   padding: $spacing-lg;
 
   @include respond($bp-sm) {
-    padding: $spacing-md;
+    padding: 1rem;
   }
 }
 

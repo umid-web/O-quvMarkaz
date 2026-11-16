@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import Modal from '../../components/ui/Modal';
+import AssignmentSelect from '../groups/AssignmentSelect';
+import { parseSubjects } from './teacherAssignment';
+import { canSeeEmployeeSalary } from '../../../auth/salaryPrivacy';
 import { maskPhoneInput, phoneDigits } from '../../utils/format';
 import { GENDERS, formatSchedule } from '../students/studentsData';
 import {
   EDUCATION_OPTIONS,
   GROUP_LIST,
   SALARY_TYPES,
-  SUBJECTS,
   TEACHER_STATUS_OPTIONS,
   findGroupOwner,
   findScheduleConflict,
@@ -22,6 +24,7 @@ const EMPTY = {
   birthDate: '',
   phone: '',
   address: '',
+  level: '',
   subjects: [],
   groups: [],
   status: 'active',
@@ -51,7 +54,7 @@ const validate = (f) => {
   if (phoneDigits(f.phone).length !== 12) e.phone = 'Telefon raqamini to‘liq kiriting';
   if (f.birthDate && f.birthDate > todayIso()) e.birthDate = 'Tug‘ilgan sana kelajakda bo‘lishi mumkin emas';
   if (!f.hiredAt) e.hiredAt = 'Ishga kirgan sanani kiriting';
-  if (f.subjects.length === 0) e.subjects = 'Kamida bitta fan tanlang';
+  if (f.subjects.length === 0) e.subjects = 'Kamida bitta fan yozing';
   const exp = Number(f.experience);
   if (!Number.isFinite(exp) || exp < 0 || exp > 60) e.experience = 'Tajriba 0 dan 60 yilgacha bo‘lsin';
   const salary = Number(f.salaryValue);
@@ -79,7 +82,9 @@ const Field = ({ label, required, error, hint, children }) => (
  */
 const FormBody = ({ teacher, teachers, onClose, onSubmit }) => {
   const isEdit = Boolean(teacher);
+  const showSalary = canSeeEmployeeSalary('main', teacher?.id);
   const [form, setForm] = useState(() => toForm(teacher));
+  const [subjectsText, setSubjectsText] = useState(() => (teacher?.subjects || []).join(', '));
   const [errors, setErrors] = useState({});
 
   const set = (name, value) => {
@@ -91,28 +96,10 @@ const FormBody = ({ teacher, teachers, onClose, onSubmit }) => {
     onChange: (e) => set(name, e.target.value),
   });
 
-  const toggleSubject = (name) => {
-    setForm((f) => {
-      const has = f.subjects.includes(name);
-      const subjects = has ? f.subjects.filter((x) => x !== name) : [...f.subjects, name];
-      // Fan olib tashlansa, shu fanning guruhlari ham olib tashlanadi
-      const groups = has ? f.groups.filter((code) => GROUP_LIST.find((g) => g.code === code)?.course !== name) : f.groups;
-      return { ...f, subjects, groups };
-    });
-    setErrors((e) => ({ ...e, subjects: undefined, groups: undefined }));
-  };
-
-  const toggleGroup = (code) => {
-    setForm((f) => ({
-      ...f,
-      groups: f.groups.includes(code) ? f.groups.filter((c) => c !== code) : [...f.groups, code],
-    }));
-    setErrors((e) => ({ ...e, groups: undefined }));
-  };
-
   const handleSubmit = (e) => {
     e.preventDefault();
-    const found = validate(form);
+    const subjects = parseSubjects(subjectsText);
+    const found = validate({ ...form, subjects });
     setErrors(found);
     if (Object.keys(found).length) {
       document.querySelector('.student-form .has-error .input, .student-form .has-error button')?.focus();
@@ -126,7 +113,8 @@ const FormBody = ({ teacher, teachers, onClose, onSubmit }) => {
       birthDate: form.birthDate,
       phone: phoneDigits(form.phone),
       address: form.address.trim(),
-      subjects: form.subjects,
+      level: form.level.trim(),
+      subjects,
       groups: form.groups,
       status: form.status,
       hiredAt: form.hiredAt,
@@ -138,7 +126,7 @@ const FormBody = ({ teacher, teachers, onClose, onSubmit }) => {
     });
   };
 
-  const availableGroups = GROUP_LIST.filter((g) => form.subjects.includes(g.course));
+  const availableGroups = GROUP_LIST;
 
   return (
     <Modal
@@ -201,6 +189,9 @@ const FormBody = ({ teacher, teachers, onClose, onSubmit }) => {
           <Field label="Ishga kirgan sana" required error={errors.hiredAt}>
             <input type="date" className="input" {...bind('hiredAt')} />
           </Field>
+          <Field label="Darajasi" hint="Masalan: IELTS 8.0, CEFR C1, oliy toifa">
+            <input className="input" {...bind('level')} maxLength={100} placeholder="Darajasini kiriting" />
+          </Field>
           <Field label="Holati">
             <select className="input" {...bind('status')}>
               {TEACHER_STATUS_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
@@ -210,19 +201,8 @@ const FormBody = ({ teacher, teachers, onClose, onSubmit }) => {
           <div className="student-form__wide">
             <div className={errors.subjects ? 'field has-error' : 'field'}>
               <span className="field__label">Dars beradigan fanlari<abbr title="Majburiy">*</abbr></span>
-              <div className="chips" role="group" aria-label="Fanlar">
-                {SUBJECTS.map((name) => (
-                  <button
-                    key={name}
-                    type="button"
-                    className={form.subjects.includes(name) ? 'chip is-active' : 'chip'}
-                    aria-pressed={form.subjects.includes(name)}
-                    onClick={() => toggleSubject(name)}
-                  >
-                    {name}
-                  </button>
-                ))}
-              </div>
+              <input className="input" aria-label="Dars beradigan fanlari" value={subjectsText} onChange={(event) => { setSubjectsText(event.target.value); setErrors((previous) => ({ ...previous, subjects: undefined })); }} placeholder="Masalan: Ingliz tili, IELTS, CEFR" />
+              <span className="field__hint">Fanlarni o‘zingiz yozing. Bir nechta fanni vergul bilan ajrating.</span>
               {errors.subjects && <span className="field__error" role="alert">{errors.subjects}</span>}
             </div>
           </div>
@@ -233,32 +213,12 @@ const FormBody = ({ teacher, teachers, onClose, onSubmit }) => {
           <div className="student-form__wide">
             <div className={errors.groups ? 'field has-error' : 'field'}>
               {availableGroups.length === 0 ? (
-                <span className="field__hint">Guruh biriktirish uchun avval fan(lar)ni tanlang.</span>
+                <span className="field__hint">Hozircha faol guruh yo‘q.</span>
               ) : (
-                <div className="group-options">
-                  {availableGroups.map((g) => {
+                <AssignmentSelect label="Guruh" value={form.groups} options={availableGroups.map((g) => {
                     const owner = findGroupOwner(teachers, g.code, teacher?.id);
-                    const checked = form.groups.includes(g.code);
-                    return (
-                      <label
-                        key={g.code}
-                        className={`group-option${checked ? ' is-checked' : ''}${owner ? ' is-disabled' : ''}`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          disabled={Boolean(owner)}
-                          onChange={() => toggleGroup(g.code)}
-                        />
-                        <span className="group-option__text">
-                          <strong>{g.code} <span>· {g.course}</span></strong>
-                          <span>{formatSchedule(g.code)}</span>
-                          {owner && <span className="group-option__owner">Band: {teacherName(owner)}</span>}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
+                    return { value: g.code, label: `${g.code} · ${g.course} · ${formatSchedule(g.code)}${owner ? ` — Band: ${teacherName(owner)}` : ''}`, disabled: Boolean(owner) };
+                  })} onChange={(groups) => set('groups', groups)} />
               )}
               {errors.groups && <span className="field__error" role="alert">{errors.groups}</span>}
             </div>
@@ -266,7 +226,8 @@ const FormBody = ({ teacher, teachers, onClose, onSubmit }) => {
         </fieldset>
 
         <fieldset className="student-form__section">
-          <legend>Ish haqi</legend>
+          <legend>{showSalary ? 'Ish haqi' : 'Qo‘shimcha ma’lumot'}</legend>
+          {showSalary && <>
           <Field label="Hisoblash usuli">
             <select className="input" {...bind('salaryType')}>
               {SALARY_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -286,6 +247,7 @@ const FormBody = ({ teacher, teachers, onClose, onSubmit }) => {
               {...bind('salaryValue')}
             />
           </Field>
+          </>}
           <div className="student-form__wide">
             <Field label="Izoh">
               <textarea className="input" rows={3} {...bind('note')} placeholder="Qo‘shimcha ma'lumot…" />

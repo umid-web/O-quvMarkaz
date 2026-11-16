@@ -1,3 +1,4 @@
+import { sessionIdentity } from '../../api/memoryStore.js';
 import { Suspense, useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
@@ -6,6 +7,7 @@ import { navItems } from '../navigation';
 import { useNotifications } from '../activity/notificationStore';
 import { syncSystemAlerts } from '../activity/systemAlerts';
 import './AdminLayout.scss';
+import AsyncState from '../components/ui/AsyncState';
 
 const APP_NAME = 'EduControl Pro';
 
@@ -13,8 +15,8 @@ const AdminLayout = () => {
   const [menuOpen, setMenuOpen] = useState(false);
   const { pathname } = useLocation();
   const { unread } = useNotifications();
-  const roleName = sessionStorage.getItem('educontrol_role') === 'teacher' ? 'Ustoz' : 'Administrator';
-  const username = sessionStorage.getItem('educontrol_username') || roleName;
+  const roleName = sessionIdentity.getItem('educontrol_role') === 'teacher' ? 'Ustoz' : 'Administrator';
+  const username = sessionIdentity.getItem('educontrol_username') || roleName;
 
   // Tizim eslatmalari (qarzdorlik, davomat, tug‘ilgan kun) — ilova ochilganda, kuniga bir martadan
   useEffect(() => {
@@ -24,18 +26,20 @@ const AdminLayout = () => {
   // Sahifa sarlavhasini joriy marshrutga moslab yangilaydi; o‘qilmaganlar soni — "(3)" ko‘rinishida
   useEffect(() => {
     const segment = pathname.replace(/^\/(admin|teacher)\/?/, '').split('/')[0];
-    const current = navItems.find((item) => item.path === segment);
+    const navPath = segment === 'dashboard' ? '' : segment === 'activity-log' ? 'activity' : segment;
+    const current = navItems.find((item) => item.path === navPath);
     const title = current ? `${current.label} · ${APP_NAME}` : APP_NAME;
     document.title = unread > 0 ? `(${unread}) ${title}` : title;
   }, [pathname, unread]);
 
   return (
     <div className="admin-container">
+      <a className="skip-link" href="#page-content">Asosiy kontentga o‘tish</a>
       <Sidebar open={menuOpen} onClose={() => setMenuOpen(false)} />
       <div className="main-content">
         <Header onMenuClick={() => setMenuOpen(true)} userName={username} roleName={roleName} />
-        <main className="page">
-          <Suspense fallback={<p className="page__loading">Yuklanmoqda…</p>}>
+        <main id="page-content" className="page" tabIndex={-1}>
+          <Suspense fallback={<AsyncState title="Sahifa yuklanmoqda" />}>
             <Outlet />
           </Suspense>
         </main>

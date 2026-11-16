@@ -2,6 +2,7 @@
 // Guruh jadvali (kunlar, vaqt) students/studentsData.js dagi GROUPS dan olinadi — yagona manba.
 
 import { COURSES, GROUPS, getGroup } from '../students/studentsData';
+import { memoryCache } from '../../../api/memoryStore.js';
 
 export const SUBJECTS = COURSES.map((c) => c.name);
 
@@ -50,12 +51,12 @@ export const findScheduleConflict = (codes) => {
 export const findGroupOwner = (teachers, code, exceptId) =>
   teachers.find((t) => t.id !== exceptId && t.groups.includes(code)) ?? null;
 
-export const getTeacherStats = (teacher, students) => {
+export const getTeacherStats = (teacher, students, payments = JSON.parse(memoryCache.getItem('edu-payments-v1') || '[]'), month = new Date().toISOString().slice(0, 7)) => {
   const mine = students.filter((s) => teacher.groups.includes(s.group) && s.status === 'active');
-  const revenue = mine.reduce((sum, s) => sum + s.monthlyFee, 0);
+  const revenue = payments.filter((p) => String(p.date || '').slice(0, 7) === month && teacher.groups.includes(p.group || students.find((s) => s.id === p.studentId)?.group)).reduce((sum, p) => sum + Math.max(0, Number(p.amount) || 0), 0);
   const salary = teacher.salaryType === 'fixed'
     ? teacher.salaryValue
-    : Math.round((revenue * teacher.salaryValue) / 100 / 10_000) * 10_000;
+    : Math.round((revenue * teacher.salaryValue) / 100);
   const weeklyLessons = teacher.groups.reduce((sum, code) => sum + (GROUPS[code]?.days.length ?? 0), 0);
   return { studentCount: mine.length, revenue, salary, weeklyLessons };
 };

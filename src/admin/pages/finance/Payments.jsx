@@ -11,16 +11,19 @@ import { useStudents } from '../students/useStudents';
 import { FinTabs, PaymentModal } from './Finance';
 import { METHODS, isoDate, usePayments } from './financeStore';
 import useReceptionPermissions from '../../../Reception/useReceptionPermissions';
+import { useCurrentTime } from '../../useCurrentTime';
 import '../students/Students.scss';
 import './Finance.scss';
+import PaymentLedger from '../students/PaymentLedger.jsx';
 
 const sum = (l) => l.reduce((t, p) => t + p.amount, 0);
 const COLS = [['date', 'Sana'], ['name', 'Talaba'], ['group', 'Guruh'], ['method', 'Usul'], ['amount', 'Summa']];
 
 const printReceipt = (p) => {
+  const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
   const w = window.open('', '_blank', 'width=420,height=560');
   if (!w) return;
-  w.document.write(`<title>Chek ${p.id}</title><body style="font-family:sans-serif;padding:24px"><h2>EduControl Pro</h2><p>To‘lov cheki № ${p.id}</p><hr><p>Talaba: <b>${p.name}</b> (${p.studentId})</p><p>Guruh: ${p.group}</p><p>Sana: ${formatDate(p.date)}</p><p>Usul: ${p.method}</p><h3>Summa: ${formatSom(p.amount)}</h3><hr><p>Rahmat!</p>`);
+  w.document.write(`<title>Chek ${escape(p.id)}</title><body style="font-family:sans-serif;padding:24px"><h2>EduControl Pro</h2><p>To‘lov cheki № ${escape(p.id)}</p><hr><p>Talaba: <b>${escape(p.name)}</b> (${escape(p.studentId)})</p><p>Guruh: ${escape(p.group)}</p><p>Sana: ${escape(formatDate(p.date))}</p><p>Usul: ${escape(p.method)}</p><h3>Summa: ${escape(formatSom(p.amount))}</h3><hr><p>Rahmat!</p>`);
   w.document.close();
   w.print();
 };
@@ -38,6 +41,7 @@ const Payments = () => {
   const [payOpen, setPayOpen] = useState(false);
   const [receipt, setReceipt] = useState(null);
   const [cancel, setCancel] = useState(null);
+  const [ledgerStudent, setLedgerStudent] = useState('');
 
   const set = (patch) => { setF((x) => ({ ...x, ...patch }));  };
   const groups = useMemo(() => [...new Set(payments.map((p) => p.group))].sort(), [payments]);
@@ -50,7 +54,8 @@ const Payments = () => {
     return list.sort((a, b) => (k === 'amount' ? a.amount - b.amount : String(a[k]).localeCompare(String(b[k]), 'uz')) * d);
   }, [payments, f, sort]);
 
-  const today = isoDate(new Date());
+  const timestamp = useCurrentTime();
+  const today = isoDate(new Date(timestamp));
   const month = today.slice(0, 7);
   const visible = rows;
   const toggle = (key) => setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'amount' || key === 'date' ? 'desc' : 'asc' }));
@@ -87,6 +92,11 @@ const Payments = () => {
         </div>
       </div>
       <FinTabs />
+      <Card title="Talabaning oylik to‘lovlari va qarzdorligi">
+        <div style={{ padding: '16px' }}><label htmlFor="ledger-student">Talabani tanlang</label><select id="ledger-student" className="input" value={ledgerStudent} onChange={(e) => setLedgerStudent(e.target.value)}><option value="">Talabani tanlang</option>{students.map((s) => <option key={s.id} value={s.id}>{s.lastName} {s.firstName} · {s.group}</option>)}</select>
+          {students.find((s) => s.id === ledgerStudent) && <PaymentLedger student={students.find((s) => s.id === ledgerStudent)} payments={payments} />}
+        </div>
+      </Card>
 
       <div className="students-stats">
         <StatCard title="Bugungi tushum" value={formatMoney(sum(payments.filter((p) => p.date === today)))} icon={Wallet} tone="success" />

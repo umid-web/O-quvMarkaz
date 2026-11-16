@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ThemeContext } from './themeContextValue';
+import { subscribeCollections, readCollectionSnapshot } from '../api/memoryStore.js';
 
 const STORAGE_KEY = 'admin-theme';
 const DEFAULT_THEME = 'dark';
@@ -19,6 +20,15 @@ const getInitialTheme = () => {
 
 export const ThemeProvider = ({ children }) => {
   const [theme, setThemeState] = useState(getInitialTheme);
+  useEffect(() => {
+    let previous;
+    return subscribeCollections((key) => {
+      if (key !== 'edu-settings-v1') return;
+      const next = readCollectionSnapshot(key)?.appearance?.theme;
+      if (isValid(next) && next !== previous) setThemeState(next);
+      previous = next;
+    });
+  }, []);
 
   // Mavzuni <html> ga qo‘llaydi — CSS tokenlar ([data-theme='dark']) shu orqali ishlaydi
   useEffect(() => {
@@ -27,7 +37,7 @@ export const ThemeProvider = ({ children }) => {
     root.style.colorScheme = theme;
     document
       .querySelector('meta[name="theme-color"]')
-      ?.setAttribute('content', theme === 'dark' ? '#0b1424' : '#f5f8fc');
+      ?.setAttribute('content', theme === 'dark' ? '#11161f' : '#e5e9ef');
     try {
       localStorage.setItem(STORAGE_KEY, theme);
     } catch {

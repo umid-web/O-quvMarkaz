@@ -1,8 +1,10 @@
+import { sessionIdentity } from '../../api/memoryStore.js';
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Bell, BellOff, CheckCheck } from 'lucide-react';
 import { categoryOf } from '../activity/meta';
-import { markAllRead, markRead, useNotifications } from '../activity/notificationStore';
+import { markAllRead, markRead, useNotifications, notificationPath } from '../activity/notificationStore';
+import { syncNotificationsBackend, hasBackendSession } from '../../api/backend';
 import { timeAgo } from '../activity/time';
 import './NotificationBell.scss';
 
@@ -17,13 +19,17 @@ const NotificationBell = () => {
   const buttonRef = useRef(null);
   const panelId = useId();
   const navigate = useNavigate();
-  const isReception = sessionStorage.getItem('educontrol_role') === 'reception';
-  const notificationPath = (path) => {
-    if (!isReception || !path?.startsWith('/admin/')) return path;
-    const section = path.slice('/admin/'.length).split('/')[0];
-    const receptionSections = new Set(['debts', 'attendance', 'students', 'payments', 'groups', 'courses', 'schedule']);
-    return receptionSections.has(section) ? `/reception/${section}` : '/reception';
-  };
+  const isReception = sessionIdentity.getItem('educontrol_role') === 'reception';
+  const isTeacher = sessionIdentity.getItem('educontrol_role') === 'teacher';
+  useEffect(() => {
+    const refresh = () => {
+      if (hasBackendSession() && !document.hidden) syncNotificationsBackend().catch(() => {});
+    };
+    refresh();
+    const timer = setInterval(refresh, 15_000);
+    window.addEventListener('focus', refresh);
+    return () => { clearInterval(timer); window.removeEventListener('focus', refresh); };
+  }, []);
 
   // Tashqariga bosilganda yoki Esc bosilganda yopiladi
   useEffect(() => {
@@ -139,7 +145,7 @@ const NotificationBell = () => {
           )}
 
           <footer className="bell__foot">
-            <Link to={isReception ? '/reception' : '/admin/notifications'} onClick={() => setOpen(false)}>
+            <Link to={isReception ? '/reception/notifications' : isTeacher ? '/teacher/notifications' : '/admin/notifications'} onClick={() => setOpen(false)}>
               {isReception ? 'Panelga o‘tish' : 'Barchasini ko‘rish'}
             </Link>
           </footer>

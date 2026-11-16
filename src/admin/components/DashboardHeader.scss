@@ -50,3 +50,12 @@
     }
   }
 }
+
+@media (max-width: 600px) {
+  .dashboard-header { align-items: stretch; gap: 1rem; }
+  .dashboard-header__left { min-width: 0; }
+  .dashboard-header__left h1 { font-size: 1.3rem; font-weight: 600; line-height: 1.3; }
+  .dashboard-header__left p { font-size: 0.78rem; line-height: 1.6; }
+  .dashboard-header__right { width: 100%; flex-wrap: wrap; gap: 0.4rem; }
+  .dashboard-header__right .period-select { flex: 1; min-width: 0; height: 36px; font-size: 0.8rem; }
+}

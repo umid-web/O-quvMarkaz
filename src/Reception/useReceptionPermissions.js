@@ -1,17 +1,14 @@
-import { useMemo } from 'react'
+import { sessionIdentity } from '../api/memoryStore.js';
 import { useLocation } from 'react-router-dom'
 import { loadRoles } from '../admin/pages/users-roles/usersStore'
+import { hasBackendSession } from '../api/backend'
 
 export default function useReceptionPermissions() {
   const { pathname } = useLocation()
   const isScopedRole = pathname.startsWith('/reception') || pathname.startsWith('/teacher')
-  const roleId = sessionStorage.getItem('educontrol_role')
-  const permissions = useMemo(() => {
-    if (!isScopedRole) return null
-    return new Set(loadRoles().find((role) => role.id === roleId)?.permissions ?? [])
-  }, [isScopedRole, roleId])
+  const roleId = sessionIdentity.getItem('educontrol_role')
+  const permissions = new Set(loadRoles().find((role) => role.id === roleId)?.permissions ?? [])
   return (module, action = 'view') => {
-    if (roleId === 'teacher' && ((module === 'attendance' && action === 'edit') || (module === 'payments' && ['create', 'edit', 'delete'].includes(action)) || (module === 'salaries' && ['create', 'edit', 'delete'].includes(action)))) return false
-    return !isScopedRole || permissions.has(`${module}.${action}`)
+    return roleId === 'owner' || (!hasBackendSession() && !isScopedRole) || permissions.has(`${module}.${action}`)
   }
 }

@@ -1,4 +1,5 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { useTableSelection } from '../../hooks/useTableSelection.js';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   ArrowDown,
@@ -31,15 +32,14 @@ import StudentFormModal from './StudentFormModal';
 import StudentDrawer from './StudentDrawer';
 import { useStudents } from './useStudents';
 import useReceptionPermissions from '../../../Reception/useReceptionPermissions';
+import { loadCourses } from '../courses/coursesStore';
+import { loadGroups } from '../groups/groupsStore';
 import {
-  ALL_GROUPS,
-  COURSES,
   GENDERS,
   PAYMENT_OPTIONS,
   PAYMENT_STATUSES,
   STATUSES,
   STATUS_OPTIONS,
-  getCourse,
   getPaymentStatus,
 } from './studentsData';
 import './Students.scss';
@@ -88,11 +88,22 @@ const Students = () => {
   const canReceivePayment = can('payments', 'create');
   const { students, add, update, remove, restore, setStatus } = useStudents();
   const { payments, add: addPayment, removeForStudent } = usePayments(students);
+  const [courses, setCourses] = useState(loadCourses);
+  const [groups, setGroups] = useState(loadGroups);
+
+  useEffect(() => {
+    const refresh = () => { setCourses(loadCourses()); setGroups(loadGroups()); };
+    const onStorage = (event) => {
+      if (!event.key || ['edu-courses-v1', 'edu-groups-v1'].includes(event.key)) refresh();
+    };
+    window.addEventListener('educontrol:collection', onStorage);
+    window.addEventListener('focus', refresh);
+    return () => { window.removeEventListener('educontrol:collection', onStorage); window.removeEventListener('focus', refresh); };
+  }, []);
 
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [sort, setSort] = useState({ key: 'enrolledAt', dir: 'desc' });
-  const [selected, setSelected] = useState(() => new Set());
   const [paymentTarget, setPaymentTarget] = useState('');
   const [paymentAmount, setPaymentAmount] = useState('');
 
@@ -142,7 +153,8 @@ const Students = () => {
   const rows = filtered;
   const isArchive = filters.status === 'archive';
   const hasFilters = query.trim() !== '' || Object.keys(DEFAULT_FILTERS).some((k) => filters[k] !== DEFAULT_FILTERS[k]);
-  const groupOptions = filters.course === 'all' ? ALL_GROUPS : getCourse(filters.course).groups;
+  const courseOptions = [...new Set(courses.map((course) => course.name).filter(Boolean))];
+  const groupOptions = [...new Set(groups.filter((group) => filters.course === 'all' || group.course === filters.course).map((group) => group.code).filter(Boolean))];
   const viewStudent = students.find((s) => s.id === viewId) ?? null;
 
   const openPayment = (student) => {
@@ -167,17 +179,10 @@ const Students = () => {
   };
 
   // Sahifadagi barcha qatorlar tanlanganmi (header checkbox holati)
-  const pageSelected = rows.length > 0 && rows.every((s) => selected.has(s.id));
-  const pageSome = rows.some((s) => selected.has(s.id));
-  const headCheckbox = useRef(null);
-  useEffect(() => {
-    if (headCheckbox.current) headCheckbox.current.indeterminate = pageSome && !pageSelected;
-  }, [pageSome, pageSelected]);
+  const { selected, setSelected, pageSelected, headCheckbox, toggleOne, togglePage } = useTableSelection(rows);
 
   // ---------- Filtr / saralash ----------
-  const resetView = () => {
-    setSelected(new Set());
-  };
+  const resetView = () => setSelected(new Set());
   const changeQuery = (value) => {
     setQuery(value);
     resetView();
@@ -198,21 +203,6 @@ const Students = () => {
   const toggleSort = (key) => {
     setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }));
   };
-
-  // ---------- Tanlash ----------
-  const toggleOne = (id) =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  const togglePage = () =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      rows.forEach((s) => (pageSelected ? next.delete(s.id) : next.add(s.id)));
-      return next;
-    });
 
   // ---------- Amallar ----------
   const handleSubmit = (data) => {
@@ -348,7 +338,7 @@ const Students = () => {
             </div>
             <select className="input" aria-label="Kurs" value={filters.course} onChange={(e) => changeFilter('course', e.target.value)}>
               <option value="all">Barcha kurslar</option>
-              {COURSES.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+              {courseOptions.map((name) => <option key={name} value={name}>{name}</option>)}
             </select>
             <select className="input" aria-label="Guruh" value={filters.group} onChange={(e) => changeFilter('group', e.target.value)}>
               <option value="all">Barcha guruhlar</option>
@@ -470,7 +460,7 @@ const Students = () => {
                         <button type="button" className="student-cell" onClick={() => setViewId(s.id)}>
                           <Avatar firstName={s.firstName} lastName={s.lastName} />
                           <span className="student-cell__text">
-                            <span className="student-cell__name">{s.lastName} {s.firstName}</span>
+                            <span className="student-cell__name" style={Number(s.debt) > 0 ? { color: 'var(--danger)' } : undefined} title={Number(s.debt) > 0 ? 'Qarzdor talaba' : undefined}>{s.lastName} {s.firstName}</span>
                             <span className="student-cell__id">{s.id}</span>
                           </span>
                         </button>

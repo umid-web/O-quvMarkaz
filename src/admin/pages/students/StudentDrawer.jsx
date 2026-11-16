@@ -33,8 +33,10 @@ const Row = ({ icon: Icon, label, children }) => (
 );
 
 /** Talaba profili — yon panel: asosiy ma'lumotlar, to‘lov holati va to‘lovlar tarixi. */
+import PaymentLedger from './PaymentLedger.jsx';
+
 const StudentDrawer = ({ student, payments = [], onClose, onEdit, onDelete }) => {
-  const teachers = useMemo(loadTeachers, []);
+  const teachers = useMemo(() => loadTeachers(), []);
   if (!student) return null;
   const status = STATUSES[student.status];
   const payment = PAYMENT_STATUSES[getPaymentStatus(student)];
@@ -129,6 +131,7 @@ const StudentDrawer = ({ student, payments = [], onClose, onEdit, onDelete }) =>
           )}
         </section>
 
+        <PaymentLedger student={student} payments={payments} />
         {student.note && (
           <section className="profile__section">
             <h4>Izoh</h4>

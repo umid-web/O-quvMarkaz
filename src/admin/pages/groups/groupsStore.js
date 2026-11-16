@@ -1,20 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEntityCollection, loadEntityCollection } from '../../hooks/useEntityCollection.js';
+import { subscribeCollections } from '../../../api/memoryStore.js';
 import { createLogger } from '../../activity/activityStore';
-import { GROUP_STATUSES, applyGroupsRegistry, createDemoGroups } from './groupsData';
+import { GROUP_STATUSES, applyGroupsRegistry } from './groupsData';
 
-// DEMO: ma'lumotlar brauzerda (localStorage) saqlanadi. Backend ulanganda faqat shu fayldagi
-// funksiyalar API so‘rovlari (axios) bilan almashtiriladi — sahifalar kodi o‘zgarmaydi.
+// Server-backed data is held only in the tab-local React store.
 const STORAGE_KEY = 'edu-groups-v1';
 
-export const loadGroups = () => {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (Array.isArray(parsed)) return parsed;
-  } catch {
-    /* buzilgan yoki mavjud bo‘lmagan ma'lumot */
-  }
-  return createDemoGroups();
-};
+export const loadGroups = () => loadEntityCollection(STORAGE_KEY);
 
 // Dars vaqti/xonasi o‘zgarsa — "Dars jadvali" bo‘limi, qolgan hammasi — "Guruhlar"
 const SCHEDULE_KEYS = new Set(['days', 'start', 'end', 'room']);
@@ -29,52 +21,9 @@ const log = createLogger({
 // Ilova ochilishi bilan (App.jsx bu faylni darhol import qiladi) umumiy guruh ro‘yxatlari yangilanadi —
 // shundan keyin Talabalar, Ustozlar va Kurslar sahifalari saqlangan guruhlarni ko‘radi.
 applyGroupsRegistry(loadGroups());
+subscribeCollections((key) => { if (key === STORAGE_KEY) applyGroupsRegistry(loadGroups()); });
 
 export const useGroups = () => {
-  const [groups, setGroups] = useState(loadGroups);
-  const latest = useRef(groups);
-
-  useEffect(() => {
-    latest.current = groups;
-    applyGroupsRegistry(groups);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(groups));
-    } catch {
-      /* e'tiborsiz */
-    }
-  }, [groups]);
-
-  // Guruh kodi — yagona kalit (o‘zgarmaydi)
-  const add = useCallback((data) => {
-    setGroups((list) => [data, ...list]);
-    log.created(data);
-    return data;
-  }, []);
-
-  const update = useCallback((code, patch) => {
-    log.updated(latest.current.find((g) => g.code === code), patch);
-    setGroups((list) => list.map((g) => (g.code === code ? { ...g, ...patch } : g)));
-  }, []);
-
-  // O‘chirilgan yozuvlarni qaytaradi — "Qaytarish" (undo) uchun
-  const remove = useCallback((codes) => {
-    const set = new Set(codes);
-    const removed = latest.current.filter((g) => set.has(g.code));
-    setGroups((list) => list.filter((g) => !set.has(g.code)));
-    log.deleted(removed);
-    return removed;
-  }, []);
-
-  const restore = useCallback((items) => {
-    log.restored(items);
-    setGroups((list) => [...items, ...list.filter((g) => !items.some((i) => i.code === g.code))]);
-  }, []);
-
-  const setStatus = useCallback((codes, status) => {
-    const set = new Set(codes);
-    log.statusChanged(latest.current.filter((g) => set.has(g.code)), status, GROUP_STATUSES[status]?.label);
-    setGroups((list) => list.map((g) => (set.has(g.code) ? { ...g, status } : g)));
-  }, []);
-
-  return { groups, add, update, remove, restore, setStatus };
+  const { items, ...actions } = useEntityCollection({ storageKey: STORAGE_KEY, log, statuses: GROUP_STATUSES, idKey: 'code' });
+  return { groups: items, ...actions };
 };

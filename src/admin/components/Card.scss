@@ -3,7 +3,7 @@
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: $radius-md;
+  border-radius: 12px;
   box-shadow: var(--shadow-sm);
   min-width: 0; // grid ichida grafik "tashib" yubormasligi uchun
 
@@ -20,18 +20,25 @@
     display: flex;
     align-items: center;
     gap: 0.6rem;
-    font-size: 1rem;
+    font-size: 0.9rem;
     font-weight: 600;
     color: var(--text);
   }
 
   &__subtitle {
     margin-top: 0.15rem;
-    font-size: 0.85rem;
+    font-size: 0.78rem;
     color: var(--text-muted);
   }
 
   &__body {
     padding: 1.1rem 1.25rem 1.25rem;
   }
+}
+
+@media (max-width: 600px) {
+  .card__header { padding: 0.85rem 0.9rem 0; gap: 0.6rem; }
+  .card__body { padding: 0.85rem 0.9rem; }
+  .card__title { font-size: 0.88rem; gap: 0.4rem; }
+  .card__subtitle { font-size: 0.75rem; line-height: 1.5; }
 }

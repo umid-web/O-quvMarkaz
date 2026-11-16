@@ -27,7 +27,7 @@
   border-left-width: 3px;
   border-radius: $radius-sm;
   box-shadow: var(--shadow-md);
-  font-size: 0.88rem;
+  font-size: 0.8rem;
   color: var(--text);
   pointer-events: auto;
   animation: toast-in 0.2s ease;
@@ -37,7 +37,7 @@
   &--info    { border-left-color: var(--primary); .toast__icon { color: var(--primary); } }
 
   &__icon { flex-shrink: 0; }
-  &__message { flex: 1; min-width: 0; }
+  &__message { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 
   &__action {
     padding: 0.2rem 0.5rem;

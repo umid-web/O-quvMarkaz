@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   Settings,
   History,
+  MessageSquare,
 } from 'lucide-react';
 
 // Yagona manba: Sidebar menyusi ham, App marshrutlari ham shu yerdan olinadi.
@@ -55,6 +56,7 @@ export const navSections = [
       { path: 'users-roles', label: 'Foydalanuvchilar va rollar', icon: ShieldCheck },
       { path: 'settings', label: 'Sozlamalar', icon: Settings },
       { path: 'activity', label: 'Faoliyat tarixi', icon: History },
+      { path: 'chat', label: 'Chat', icon: MessageSquare },
     ],
   },
 ];

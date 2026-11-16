@@ -66,12 +66,12 @@
   width: 100%;
   min-width: 760px;
   border-collapse: collapse;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
 
   th {
     padding: 0.7rem 0.8rem;
     text-align: left;
-    font-size: 0.72rem;
+    font-size: 0.65rem;
     font-weight: 600;
     letter-spacing: 0.05em;
     text-transform: uppercase;
@@ -84,7 +84,7 @@
   }
 
   td {
-    padding: 0.7rem 0.8rem;
+    padding: 0.6rem 0.8rem;
     border-bottom: 1px solid var(--border);
     vertical-align: middle;
 
@@ -230,6 +230,8 @@ code {
 
 .act-diff {
   width: 100%;
+  table-layout: fixed;
+  overflow-wrap: anywhere;
   border: 1px solid var(--border);
   border-radius: $radius-sm;
   border-collapse: separate;
